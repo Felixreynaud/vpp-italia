@@ -36,8 +36,7 @@ jobs:
     runs-on: ubuntu-latest
 
     # Protection supplémentaire : destroy en production nécessite une approbation.
-    # Mettre en commentaire si les GitHub Environments (staging/production) ne sont pas configurés —
-    # dans ce cas les secrets sont lus au niveau du dépôt (Settings → Secrets → Actions).
+    # Décommenter uniquement si les GitHub Environments staging/production sont créés dans Settings.
     # environment: ${{ inputs.action == 'destroy' && 'production-destroy' || inputs.environment }}
 
     defaults:
@@ -80,14 +79,18 @@ jobs:
       #   TF_VAR_ADMIN_CIDR       — CIDR SSH admin (ex: "203.0.113.5/32")
       # ------------------------------------------------------------------
       - name: Create terraform.tfvars
+        env:
+          TF_ACCOUNT_ID:    ${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}
+          TF_ENVIRONMENT:   ${{ inputs.environment }}
+          TF_DB_PASSWORD:   ${{ secrets.TF_VAR_DB_PASSWORD }}
+          TF_EC2_PUBLIC_KEY: ${{ secrets.TF_VAR_EC2_PUBLIC_KEY }}
+          TF_ADMIN_CIDR:    ${{ secrets.TF_VAR_ADMIN_CIDR }}
         run: |
-          cat > terraform.tfvars <<'TFVARS'
-aws_account_id = "${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}"
-environment    = "${{ inputs.environment }}"
-db_password    = "${{ secrets.TF_VAR_DB_PASSWORD }}"
-ec2_public_key = "${{ secrets.TF_VAR_EC2_PUBLIC_KEY }}"
-admin_cidr     = "${{ secrets.TF_VAR_ADMIN_CIDR }}"
-TFVARS
+          echo "aws_account_id = \"$TF_ACCOUNT_ID\""     > terraform.tfvars
+          echo "environment    = \"$TF_ENVIRONMENT\""   >> terraform.tfvars
+          echo "db_password    = \"$TF_DB_PASSWORD\""   >> terraform.tfvars
+          echo "ec2_public_key = \"$TF_EC2_PUBLIC_KEY\"" >> terraform.tfvars
+          echo "admin_cidr     = \"$TF_ADMIN_CIDR\""    >> terraform.tfvars
 
       # ------------------------------------------------------------------
       # Init — toujours exécuté
