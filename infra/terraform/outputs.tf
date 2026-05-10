@@ -7,6 +7,16 @@ output "api_public_ip" {
   value       = aws_eip.api.public_ip
 }
 
+output "ec2_public_ip" {
+  description = "Alias — IP publique Elastic EC2 (identique à api_public_ip)"
+  value       = aws_eip.api.public_ip
+}
+
+output "ec2_public_dns" {
+  description = "DNS public de l'instance EC2 (peut changer au redémarrage — préférer l'EIP)"
+  value       = aws_instance.api.public_dns
+}
+
 output "api_ssh_command" {
   description = "Commande SSH pour se connecter à l'instance API"
   value       = "ssh -i ~/.ssh/vpp-deploy ubuntu@${aws_eip.api.public_ip}"
@@ -33,9 +43,14 @@ output "database_url_template" {
   sensitive   = false
 }
 
-output "s3_bucket_name" {
-  description = "Nom du bucket S3 pour les logs et backups"
-  value       = aws_s3_bucket.vpp.bucket
+output "s3_logs_bucket_name" {
+  description = "Nom du bucket S3 pour les logs applicatifs"
+  value       = aws_s3_bucket.logs.bucket
+}
+
+output "s3_backups_bucket_name" {
+  description = "Nom du bucket S3 pour les backups BDD"
+  value       = aws_s3_bucket.backups.bucket
 }
 
 output "secrets_manager_arns" {

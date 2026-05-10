@@ -176,17 +176,24 @@ resource "aws_iam_role_policy" "ec2_api_s3" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
         Resource = [
-          aws_s3_bucket.vpp.arn,
-          "${aws_s3_bucket.vpp.arn}/*"
+          aws_s3_bucket.logs.arn,
+          "${aws_s3_bucket.logs.arn}/*",
+          aws_s3_bucket.backups.arn,
+          "${aws_s3_bucket.backups.arn}/*",
         ]
       },
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = "arn:aws:secretsmanager:${var.aws_region}:*:secret:vpp-italia/${var.environment}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParametersByPath"]
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/vpp-italia/${var.environment}/*"
       },
       {
         Effect   = "Allow"
@@ -227,9 +234,10 @@ resource "aws_instance" "api" {
   }
 
   user_data = templatefile("${path.module}/userdata.sh", {
-    environment    = var.environment
-    aws_region     = var.aws_region
-    s3_bucket_name = aws_s3_bucket.vpp.bucket
+    environment         = var.environment
+    aws_region          = var.aws_region
+    s3_logs_bucket_name = aws_s3_bucket.logs.bucket
+    s3_backups_bucket   = aws_s3_bucket.backups.bucket
   })
 
   tags = { Name = "vpp-api-${var.environment}" }
@@ -307,55 +315,87 @@ resource "aws_db_parameter_group" "timescaledb" {
 }
 
 # =============================================================================
-# S3 — logs applicatifs et backups BDD
+# S3 — logs applicatifs
 # =============================================================================
 
-resource "aws_s3_bucket" "vpp" {
-  bucket        = "vpp-italia-${var.environment}-${var.aws_account_id}"
+resource "aws_s3_bucket" "logs" {
+  bucket        = "vpp-italia-logs-${var.environment}-${var.aws_account_id}"
   force_destroy = var.environment != "production"
 
-  tags = { Name = "vpp-s3-${var.environment}" }
+  tags = { Name = "vpp-s3-logs-${var.environment}" }
 }
 
-resource "aws_s3_bucket_versioning" "vpp" {
-  bucket = aws_s3_bucket.vpp.id
-  versioning_configuration {
-    status = "Enabled"
-  }
+resource "aws_s3_bucket_versioning" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  versioning_configuration { status = "Enabled" }
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "vpp" {
-  bucket = aws_s3_bucket.vpp.id
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
   rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
+    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "vpp" {
-  bucket                  = aws_s3_bucket.vpp.id
+resource "aws_s3_bucket_public_access_block" "logs" {
+  bucket                  = aws_s3_bucket.logs.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
-# Lifecycle : logs conservés 30 jours, backups 90 jours puis Glacier
-resource "aws_s3_bucket_lifecycle_configuration" "vpp" {
-  bucket = aws_s3_bucket.vpp.id
+# Logs conservés 30 jours puis supprimés
+resource "aws_s3_bucket_lifecycle_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
 
   rule {
     id     = "logs-expiry"
     status = "Enabled"
-    filter { prefix = "logs/" }
+    filter { prefix = "" }
     expiration { days = 30 }
   }
+}
+
+# =============================================================================
+# S3 — backups BDD
+# =============================================================================
+
+resource "aws_s3_bucket" "backups" {
+  bucket        = "vpp-italia-backups-${var.environment}-${var.aws_account_id}"
+  force_destroy = var.environment != "production"
+
+  tags = { Name = "vpp-s3-backups-${var.environment}" }
+}
+
+resource "aws_s3_bucket_versioning" "backups" {
+  bucket = aws_s3_bucket.backups.id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
+  bucket = aws_s3_bucket.backups.id
+  rule {
+    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "backups" {
+  bucket                  = aws_s3_bucket.backups.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Backups → Glacier après 30 jours, supprimés après 90 jours
+resource "aws_s3_bucket_lifecycle_configuration" "backups" {
+  bucket = aws_s3_bucket.backups.id
 
   rule {
     id     = "backups-glacier"
     status = "Enabled"
-    filter { prefix = "backups/" }
+    filter { prefix = "" }
     transition {
       days          = 30
       storage_class = "GLACIER"

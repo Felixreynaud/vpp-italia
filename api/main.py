@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from api.dependencies import close_db, init_db
-from api.routes import batteries, dispatch, markets
+from api.routes import batteries, dispatch, markets, metrics
 from core.scheduler import MarketScheduler
 
 logger = structlog.get_logger(__name__)
@@ -80,15 +80,11 @@ API_PREFIX = "/api/v1"
 app.include_router(batteries.router, prefix=API_PREFIX, tags=["batteries"])
 app.include_router(dispatch.router, prefix=API_PREFIX, tags=["dispatch"])
 app.include_router(markets.router, prefix=API_PREFIX, tags=["markets"])
+app.include_router(metrics.router, tags=["monitoring"])
 
 # ---------------------------------------------------------------------------
-# Health & root
+# Root
 # ---------------------------------------------------------------------------
-
-
-@app.get("/health", include_in_schema=False)
-async def health() -> dict:
-    return {"status": "ok", "version": app.version}
 
 
 @app.get("/", include_in_schema=False)

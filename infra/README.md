@@ -38,10 +38,11 @@ Internet
 │  └───────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────┘
 
-     ┌──────────────┐
-     │  S3 Bucket   │  ← Logs applicatifs + backups BDD
-     │  (chiffré)   │     Lifecycle: logs 30j, backups → Glacier 30j
-     └──────────────┘
+     ┌──────────────────────┐  ┌──────────────────────────┐
+     │  S3 logs (chiffré)   │  │  S3 backups (chiffré)    │
+     │  logs applicatifs    │  │  dumps PostgreSQL         │
+     │  Lifecycle : 30j     │  │  Glacier 30j → supprimé 90j│
+     └──────────────────────┘  └──────────────────────────┘
 
      ┌──────────────────┐
      │  Secrets Manager │  ← DATABASE_URL, JWT_SECRET, GME_PASSWORD, TERNA_SECRET
@@ -151,11 +152,13 @@ terraform output
 
 Exemple de sortie :
 ```
-api_public_ip       = "15.161.42.87"
-api_ssh_command     = "ssh -i ~/.ssh/vpp-deploy ubuntu@15.161.42.87"
-api_url             = "http://15.161.42.87:8000"
-rds_endpoint        = "vpp-italia-staging.xxxx.eu-south-1.rds.amazonaws.com:5432"
-s3_bucket_name      = "vpp-italia-staging-123456789012"
+ec2_public_ip          = "15.161.42.87"
+ec2_public_dns         = "ec2-15-161-42-87.eu-south-1.compute.amazonaws.com"
+api_ssh_command        = "ssh -i ~/.ssh/vpp-deploy ubuntu@15.161.42.87"
+api_url                = "http://15.161.42.87:8000"
+rds_endpoint           = "vpp-italia-staging.xxxx.eu-south-1.rds.amazonaws.com:5432"
+s3_logs_bucket_name    = "vpp-italia-logs-staging-123456789012"
+s3_backups_bucket_name = "vpp-italia-backups-staging-123456789012"
 ```
 
 ### Étape 6 — Renseigner les secrets dans AWS Secrets Manager
@@ -292,13 +295,52 @@ Push sur main
 
 ---
 
+## Monitoring Grafana
+
+Les fichiers de configuration Grafana se trouvent dans `monitoring/grafana/`.
+
+### Importer la datasource
+
+```bash
+# Depuis le serveur Grafana, remplacer les variables d'environnement
+export RDS_ENDPOINT=$(terraform output -raw rds_endpoint)
+export DB_PASSWORD="votre-mot-de-passe-rds"
+
+envsubst < ../monitoring/grafana/datasource.json | \
+  curl -s -X POST http://admin:admin@localhost:3000/api/datasources \
+  -H "Content-Type: application/json" -d @-
+```
+
+### Importer les dashboards
+
+```bash
+# Dashboard flotte batteries
+curl -s -X POST http://admin:admin@localhost:3000/api/dashboards/import \
+  -H "Content-Type: application/json" \
+  -d "{\"dashboard\": $(cat ../monitoring/grafana/dashboards/dashboard_batteries.json), \"overwrite\": true}"
+```
+
+### Importer les alertes
+
+```bash
+curl -s -X POST http://admin:admin@localhost:3000/api/ruler/grafana/api/v1/rules/VPP%20Italia \
+  -H "Content-Type: application/json" \
+  -d @../monitoring/grafana/alerts.json
+```
+
+> Pour Grafana Cloud, remplacer `http://admin:admin@localhost:3000` par
+> l'URL de votre instance avec un API key Bearer.
+
+---
+
 ## Coût estimé (eu-south-1)
 
 | Ressource | Spec | Coût mensuel estimé |
 |-----------|------|---------------------|
 | EC2 t3.medium | 2 vCPU, 4 GB RAM | ~35 USD |
 | RDS db.t3.micro | 1 vCPU, 1 GB RAM, 20 GB gp3 | ~25 USD |
-| S3 | 10 GB stockage + transferts | ~1 USD |
+| S3 logs | Logs applicatifs 30 jours | ~0.5 USD |
+| S3 backups | Backups BDD (Glacier) | ~0.5 USD |
 | IP Elastic | 1 adresse | ~4 USD |
 | CloudWatch Logs | ~5 GB/mois | ~3 USD |
 | **Total estimé** | | **~68 USD/mois** |

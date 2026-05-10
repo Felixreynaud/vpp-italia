@@ -1,0 +1,289 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "VPP Italia — Batteries",
+      "folder": "VPP Italia",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "vpp-alert-soc-low",
+          "title": "SoC critique — trop bas",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "vpp-prometheus",
+              "model": {
+                "expr": "vpp_battery_soc_percent",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "-100",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": { "params": [10], "type": "lt" },
+                    "operator": { "type": "and" },
+                    "query": { "params": ["A"] },
+                    "reducer": { "params": [], "type": "last" },
+                    "type": "query"
+                  }
+                ],
+                "datasource": { "type": "__expr__", "uid": "-100" },
+                "expression": "A",
+                "refId": "C",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "2m",
+          "annotations": {
+            "description": "La batterie {{ $labels.battery_id }} a un SoC de {{ $values.A }}% — en dessous du seuil opérationnel de 10%.",
+            "runbook_url": "https://github.com/felixreynaud/vpp-italia/blob/main/docs/runbooks/soc-alert.md",
+            "summary": "SoC batterie {{ $labels.battery_id }} trop bas ({{ $values.A }}%)"
+          },
+          "labels": {
+            "severity": "critical",
+            "team": "vpp-ops"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "vpp-alert-soc-high",
+          "title": "SoC critique — trop haut",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "vpp-prometheus",
+              "model": {
+                "expr": "vpp_battery_soc_percent",
+                "instant": true,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "-100",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": { "params": [92], "type": "gt" },
+                    "operator": { "type": "and" },
+                    "query": { "params": ["A"] },
+                    "reducer": { "params": [], "type": "last" },
+                    "type": "query"
+                  }
+                ],
+                "datasource": { "type": "__expr__", "uid": "-100" },
+                "expression": "A",
+                "refId": "C",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "2m",
+          "annotations": {
+            "description": "La batterie {{ $labels.battery_id }} a un SoC de {{ $values.A }}% — au-dessus du seuil max de 92%. Risque de dégradation cycle.",
+            "summary": "SoC batterie {{ $labels.battery_id }} trop haut ({{ $values.A }}%)"
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "vpp-ops"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "vpp-alert-battery-offline",
+          "title": "Batterie hors ligne",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "vpp-prometheus",
+              "model": {
+                "expr": "vpp_battery_online",
+                "instant": true,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "-100",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": { "params": [1], "type": "lt" },
+                    "operator": { "type": "and" },
+                    "query": { "params": ["A"] },
+                    "reducer": { "params": [], "type": "last" },
+                    "type": "query"
+                  }
+                ],
+                "datasource": { "type": "__expr__", "uid": "-100" },
+                "expression": "A",
+                "refId": "C",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "noDataState": "Alerting",
+          "execErrState": "Error",
+          "for": "5m",
+          "annotations": {
+            "description": "La batterie {{ $labels.battery_id }} (protocole {{ $labels.protocol }}) est hors ligne depuis plus de 5 minutes.",
+            "summary": "Batterie {{ $labels.battery_id }} hors ligne"
+          },
+          "labels": {
+            "severity": "critical",
+            "team": "vpp-ops"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "vpp-alert-soc-deviation",
+          "title": "Déviation SoC — écart plan/réel > 10%",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "vpp-timescaledb",
+              "model": {
+                "rawSql": "SELECT NOW() AS time, AVG(ABS(br.soc_percent - dp.planned_soc_end_percent)) AS value FROM battery_readings br JOIN dispatch_plans dp ON br.battery_id = dp.battery_id WHERE br.time > NOW() - INTERVAL '5 minutes' AND dp.delivery_date = CURRENT_DATE AND dp.quarter_hour = EXTRACT(HOUR FROM NOW())::int * 4 + EXTRACT(MINUTE FROM NOW())::int / 15 GROUP BY 1",
+                "format": "time_series",
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "-100",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": { "params": [10], "type": "gt" },
+                    "operator": { "type": "and" },
+                    "query": { "params": ["A"] },
+                    "reducer": { "params": [], "type": "last" },
+                    "type": "query"
+                  }
+                ],
+                "datasource": { "type": "__expr__", "uid": "-100" },
+                "expression": "A",
+                "refId": "C",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "OK",
+          "for": "10m",
+          "annotations": {
+            "description": "L'écart moyen entre SoC planifié et réel dépasse 10% — le replanificateur devrait se déclencher.",
+            "summary": "Déviation SoC plan/réel > 10%"
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "vpp-ops"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "vpp-alert-api-down",
+          "title": "API VPP Italia inaccessible",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "vpp-prometheus",
+              "model": {
+                "expr": "up{job=\"vpp-api\"}",
+                "instant": true,
+                "refId": "A"
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "-100",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": { "params": [1], "type": "lt" },
+                    "operator": { "type": "and" },
+                    "query": { "params": ["A"] },
+                    "reducer": { "params": [], "type": "last" },
+                    "type": "query"
+                  }
+                ],
+                "datasource": { "type": "__expr__", "uid": "-100" },
+                "expression": "A",
+                "refId": "C",
+                "type": "classic_conditions"
+              }
+            }
+          ],
+          "noDataState": "Alerting",
+          "execErrState": "Alerting",
+          "for": "2m",
+          "annotations": {
+            "description": "L'API VPP Italia ne répond plus aux health checks Prometheus depuis 2 minutes.",
+            "summary": "API VPP Italia DOWN"
+          },
+          "labels": {
+            "severity": "critical",
+            "team": "vpp-ops"
+          },
+          "isPaused": false
+        }
+      ]
+    }
+  ],
+  "contactPoints": [
+    {
+      "orgId": 1,
+      "name": "vpp-ops-pagerduty",
+      "receivers": [
+        {
+          "uid": "vpp-pd-critical",
+          "type": "pagerduty",
+          "settings": {
+            "integrationKey": "${PAGERDUTY_INTEGRATION_KEY}",
+            "severity": "critical",
+            "class": "vpp-battery",
+            "component": "api",
+            "group": "vpp-italia"
+          },
+          "disableResolveMessage": false
+        }
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "orgId": 1,
+      "receiver": "vpp-ops-pagerduty",
+      "group_by": ["alertname", "battery_id"],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "1h",
+      "routes": [
+        {
+          "receiver": "vpp-ops-pagerduty",
+          "matchers": ["severity=critical"],
+          "group_wait": "10s",
+          "repeat_interval": "30m"
+        }
+      ]
+    }
+  ]
+}
