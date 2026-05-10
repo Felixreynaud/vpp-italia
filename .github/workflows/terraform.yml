@@ -80,11 +80,11 @@ jobs:
       # ------------------------------------------------------------------
       - name: Create terraform.tfvars
         env:
-          TF_ACCOUNT_ID:    ${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}
-          TF_ENVIRONMENT:   ${{ inputs.environment }}
-          TF_DB_PASSWORD:   ${{ secrets.TF_VAR_DB_PASSWORD }}
+          TF_ACCOUNT_ID:     ${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}
+          TF_ENVIRONMENT:    ${{ inputs.environment }}
+          TF_DB_PASSWORD:    ${{ secrets.TF_VAR_DB_PASSWORD }}
           TF_EC2_PUBLIC_KEY: ${{ secrets.TF_VAR_EC2_PUBLIC_KEY }}
-          TF_ADMIN_CIDR:    ${{ secrets.TF_VAR_ADMIN_CIDR }}
+          TF_ADMIN_CIDR:     ${{ secrets.TF_VAR_ADMIN_CIDR }}
         run: |
           echo "aws_account_id = \"$TF_ACCOUNT_ID\""     > terraform.tfvars
           echo "environment    = \"$TF_ENVIRONMENT\""   >> terraform.tfvars
@@ -141,7 +141,6 @@ jobs:
           cat outputs.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-          # Extraire les valeurs clés pour les steps suivants
           EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null || echo "")
           RDS_EP=$(terraform output -raw rds_endpoint  2>/dev/null || echo "")
           S3_LOGS=$(terraform output -raw s3_logs_bucket_name 2>/dev/null || echo "")
@@ -159,9 +158,9 @@ jobs:
           echo "  S3 backups bucket : $S3_BACK"
 
       # ------------------------------------------------------------------
-      # Post-apply : renseigner les paramètres SSM indispensables au
-      # démarrage de l'API (database-url, jwt-secret-key, etc.)
-      # Secrets requis supplémentaires :
+      # Post-apply : paramètres SSM
+      # Secrets requis :
+      #   SSM_JWT_SECRET_KEY        — clé JWT 64 bytes hex
       #   SSM_GME_API_PASSWORD      — mot de passe API GME
       #   SSM_TERNA_CLIENT_SECRET   — client secret Terna
       #   SSM_HUAWEI_CLIENT_SECRET  — client secret Huawei FusionSolar
@@ -179,7 +178,7 @@ jobs:
           HW_SC:    ${{ secrets.SSM_HUAWEI_CLIENT_SECRET }}
         run: |
           PREFIX="/vpp-italia/$ENV"
-          REGION="${{ env.AWS_REGION }}"
+          REGION="eu-south-1"
 
           put_param() {
             local name="$1" value="$2"
@@ -190,20 +189,20 @@ jobs:
               --overwrite \
               --region "$REGION" \
               --no-cli-pager
-            echo "  SSM $PREFIX/$name → OK"
+            echo "  SSM $PREFIX/$name OK"
           }
 
           DB_URL="postgresql+asyncpg://vpp:${DB_PASS}@${RDS_EP}/vpp_italia"
-          put_param "database-url"        "$DB_URL"
-          put_param "jwt-secret-key"      "$JWT_KEY"
-          put_param "gme-api-password"    "$GME_PASS"
-          put_param "terna-client-secret" "$TERNA_SC"
+          put_param "database-url"         "$DB_URL"
+          put_param "jwt-secret-key"       "$JWT_KEY"
+          put_param "gme-api-password"     "$GME_PASS"
+          put_param "terna-client-secret"  "$TERNA_SC"
           put_param "huawei-client-secret" "$HW_SC"
 
           echo "Paramètres SSM provisionnés." >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Post-apply : attendre que l'API démarre et faire un smoke test
+      # Smoke test
       # ------------------------------------------------------------------
       - name: Smoke test API
         if: inputs.action == 'apply'
@@ -219,18 +218,16 @@ jobs:
               curl -s "http://$EC2_IP:8000/health" | python3 -m json.tool
               break
             fi
-            echo "  [${i}/18] HTTP $STATUS — nouvelle tentative dans 10s..."
+            echo "  [$i/18] HTTP $STATUS — nouvelle tentative dans 10s..."
             sleep 10
           done
-
           if [ "$STATUS" != "200" ]; then
             echo "ERREUR : API non accessible après 3 minutes"
-            echo "Logs disponibles via : ssh ubuntu@$EC2_IP 'journalctl -u vpp-api -n 50'"
             exit 1
           fi
 
       # ------------------------------------------------------------------
-      # Destroy — uniquement si action == destroy
+      # Destroy
       # ------------------------------------------------------------------
       - name: Terraform destroy
         if: inputs.action == 'destroy'
@@ -241,11 +238,10 @@ jobs:
             -input=false \
             -auto-approve \
             -no-color
-
           echo "## Infrastructure ${{ inputs.environment }} détruite" >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Nettoyage — toujours exécuté pour ne pas laisser de secrets sur le runner
+      # Nettoyage — toujours exécuté
       # ------------------------------------------------------------------
       - name: Nettoyer les fichiers sensibles
         if: always()

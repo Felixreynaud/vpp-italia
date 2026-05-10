@@ -51,7 +51,7 @@ jobs:
         run: pytest tests/unit/ -v --cov=. --cov-fail-under=80
         env:
           JWT_SECRET_KEY: test-secret-key-ci
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           GME_API_BASE_URL: http://localhost:9999
           GME_API_USERNAME: test
           GME_API_PASSWORD: test
