@@ -1,0 +1,282 @@
+{
+  "title": "VPP Italia — Batteries",
+  "uid": "vpp-batteries",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "timezone": "Europe/Rome",
+  "tags": ["vpp", "batteries", "monitoring"],
+  "templating": {
+    "list": [
+      {
+        "name": "battery_id",
+        "label": "Batterie",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "vpp-timescaledb" },
+        "query": "SELECT battery_id FROM batteries WHERE is_active = true ORDER BY 1",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Batteries en ligne",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "vpp-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(vpp_battery_online)",
+          "legendFormat": "En ligne"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 80 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" }
+    },
+    {
+      "id": 2,
+      "title": "SoC moyen flotte",
+      "type": "gauge",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "vpp-prometheus" },
+      "targets": [
+        {
+          "expr": "avg(vpp_battery_soc_percent)",
+          "legendFormat": "SoC moyen %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "green", "value": 20 },
+              { "color": "yellow", "value": 85 },
+              { "color": "red", "value": 92 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Puissance totale flotte (kW)",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "vpp-prometheus" },
+      "targets": [
+        {
+          "expr": "sum(vpp_battery_power_kw)",
+          "legendFormat": "Puissance totale"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatt",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 0 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 4,
+      "title": "P&L aujourd'hui (€)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "postgres", "uid": "vpp-timescaledb" },
+      "targets": [
+        {
+          "rawSql": "SELECT NOW() AS time, SUM(revenue_eur) AS value FROM dispatch_logs WHERE success = true AND timestamp >= CURRENT_DATE",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyEUR",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0 },
+              { "color": "green", "value": 100 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 5,
+      "title": "Temperature max (°C)",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "vpp-prometheus" },
+      "targets": [
+        {
+          "expr": "max(vpp_battery_temperature_celsius)",
+          "legendFormat": "Temp max"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 35 },
+              { "color": "red", "value": 45 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 10,
+      "title": "SoC par batterie (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "vpp-prometheus" },
+      "targets": [
+        {
+          "expr": "vpp_battery_soc_percent{battery_id=~\"$battery_id\"}",
+          "legendFormat": "{{battery_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "lineWidth": 1, "fillOpacity": 5 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "green", "value": 20 },
+              { "color": "yellow", "value": 85 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "min", "max"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Puissance active par batterie (kW)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "vpp-prometheus" },
+      "targets": [
+        {
+          "expr": "vpp_battery_power_kw{battery_id=~\"$battery_id\"}",
+          "legendFormat": "{{battery_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatt",
+          "custom": { "lineWidth": 1, "fillOpacity": 5 },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "A" },
+            "properties": [
+              { "id": "custom.thresholdsStyle", "value": { "mode": "line" } }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Plan de dispatch — Aujourd'hui (QH)",
+      "type": "heatmap",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "vpp-timescaledb" },
+      "targets": [
+        {
+          "rawSql": "SELECT delivery_date + (quarter_hour * INTERVAL '15 minutes') AS time, battery_id::text AS metric, planned_power_kw AS value FROM dispatch_plans WHERE delivery_date = CURRENT_DATE ORDER BY 1",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "kwatt", "color": { "mode": "spectrum", "scheme": "RdYlGn" } }
+      },
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": { "mode": "scheme", "scheme": "RdYlGn", "steps": 64, "reverse": false },
+        "yAxis": { "label": "Batterie", "unit": "short" },
+        "tooltip": { "show": true, "yHistogram": false },
+        "legend": { "show": true }
+      }
+    },
+    {
+      "id": 30,
+      "title": "Alertes actives",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "vpp-prometheus" },
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "{{alertname}} — {{battery_id}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "displayMode": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Time" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+          { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "custom.hidden", "value": true }] }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "alertname", "desc": false }]
+      }
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "title": "VPP Italia — Fleet Overview",
+  "uid": "vpp-fleet-overview",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["vpp", "batteries", "fleet"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Fleet SoC Distribution",
+      "type": "histogram",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "vpp_battery_soc_percent",
+          "legendFormat": "{{ battery_id }}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Total Fleet Power (kW)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(vpp_battery_power_kw)",
+          "legendFormat": "Total Power kW"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kW",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 40000 },
+              { "color": "red", "value": 48000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Batteries Online / Offline",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(vpp_battery_state{state='online'})",
+          "legendFormat": "Online"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "count(vpp_battery_state{state='offline'})",
+          "legendFormat": "Offline"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Power per Battery — Last Hour",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "vpp_battery_power_kw",
+          "legendFormat": "{{ battery_id }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kW",
+          "custom": { "lineWidth": 1, "fillOpacity": 5 }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Market Revenue Today (EUR)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 18 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(vpp_market_revenue_eur_total)",
+          "legendFormat": "Revenue EUR"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyEUR" } }
+    },
+    {
+      "id": 6,
+      "title": "Active Alerts",
+      "type": "alertlist",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 18 },
+      "options": {
+        "alertName": "",
+        "dashboardAlerts": false,
+        "stateFilter": { "firing": true, "pending": true }
+      }
+    }
+  ]
+}

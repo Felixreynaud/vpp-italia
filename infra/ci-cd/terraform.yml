@@ -1,0 +1,246 @@
+name: Deploy Infrastructure (Terraform)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      environment:
+        description: 'Environnement cible'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+# Un seul job Terraform à la fois par environnement
+concurrency:
+  group: terraform-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-south-1
+  TF_DIR: infra/terraform
+
+jobs:
+  terraform:
+    name: Terraform ${{ inputs.action }} (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+
+    # Protection supplémentaire : destroy en production nécessite une approbation
+    environment: ${{ inputs.action == 'destroy' && 'production-destroy' || inputs.environment }}
+
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # Credentials AWS
+      # ------------------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      # ------------------------------------------------------------------
+      # Terraform CLI
+      # ------------------------------------------------------------------
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.7"
+
+      # ------------------------------------------------------------------
+      # Générer terraform.tfvars depuis les secrets GitHub
+      # Les secrets sont définis dans : Settings → Secrets → Actions
+      # Secrets requis :
+      #   TF_VAR_AWS_ACCOUNT_ID   — ID du compte AWS (12 chiffres)
+      #   TF_VAR_DB_PASSWORD      — Mot de passe RDS (≥ 16 chars)
+      #   TF_VAR_EC2_PUBLIC_KEY   — Contenu de ~/.ssh/vpp-deploy.pub
+      #   TF_VAR_ADMIN_CIDR       — CIDR SSH admin (ex: "203.0.113.5/32")
+      # ------------------------------------------------------------------
+      - name: Create terraform.tfvars
+        run: |
+          cat > terraform.tfvars <<TFVARS
+          aws_account_id = "${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}"
+          environment    = "${{ inputs.environment }}"
+          db_password    = "${{ secrets.TF_VAR_DB_PASSWORD }}"
+          ec2_public_key = "${{ secrets.TF_VAR_EC2_PUBLIC_KEY }}"
+          admin_cidr     = "${{ secrets.TF_VAR_ADMIN_CIDR }}"
+          TFVARS
+
+      # ------------------------------------------------------------------
+      # Init — toujours exécuté
+      # ------------------------------------------------------------------
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      # ------------------------------------------------------------------
+      # Plan — toujours exécuté (affiché en résumé du job)
+      # ------------------------------------------------------------------
+      - name: Terraform plan
+        id: plan
+        run: |
+          terraform plan \
+            -var-file=terraform.tfvars \
+            -input=false \
+            -out=tfplan \
+            -no-color \
+            2>&1 | tee plan_output.txt
+
+          echo "## Terraform Plan — ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 plan_output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # ------------------------------------------------------------------
+      # Apply — uniquement si action == apply
+      # ------------------------------------------------------------------
+      - name: Terraform apply
+        if: inputs.action == 'apply'
+        run: |
+          terraform apply -input=false -auto-approve tfplan
+          echo "## Apply terminé" >> $GITHUB_STEP_SUMMARY
+
+      # ------------------------------------------------------------------
+      # Outputs — affichés après apply
+      # ------------------------------------------------------------------
+      - name: Afficher les outputs Terraform
+        if: inputs.action == 'apply'
+        id: tf_outputs
+        run: |
+          echo "## Outputs Terraform" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          terraform output -no-color 2>&1 | tee outputs.txt
+          cat outputs.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # Extraire les valeurs clés pour les steps suivants
+          EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null || echo "")
+          RDS_EP=$(terraform output -raw rds_endpoint  2>/dev/null || echo "")
+          S3_LOGS=$(terraform output -raw s3_logs_bucket_name 2>/dev/null || echo "")
+          S3_BACK=$(terraform output -raw s3_backups_bucket_name 2>/dev/null || echo "")
+
+          echo "ec2_ip=$EC2_IP"         >> $GITHUB_OUTPUT
+          echo "rds_endpoint=$RDS_EP"   >> $GITHUB_OUTPUT
+          echo "s3_logs=$S3_LOGS"       >> $GITHUB_OUTPUT
+          echo "s3_backups=$S3_BACK"    >> $GITHUB_OUTPUT
+
+          echo ""
+          echo "  EC2 IP publique   : $EC2_IP"
+          echo "  RDS endpoint      : $RDS_EP"
+          echo "  S3 logs bucket    : $S3_LOGS"
+          echo "  S3 backups bucket : $S3_BACK"
+
+      # ------------------------------------------------------------------
+      # Post-apply : renseigner les paramètres SSM indispensables au
+      # démarrage de l'API (database-url, jwt-secret-key, etc.)
+      # Secrets requis supplémentaires :
+      #   SSM_GME_API_PASSWORD      — mot de passe API GME
+      #   SSM_TERNA_CLIENT_SECRET   — client secret Terna
+      #   SSM_HUAWEI_CLIENT_SECRET  — client secret Huawei FusionSolar
+      # ------------------------------------------------------------------
+      - name: Provisionner les paramètres SSM
+        if: inputs.action == 'apply'
+        env:
+          EC2_IP:   ${{ steps.tf_outputs.outputs.ec2_ip }}
+          RDS_EP:   ${{ steps.tf_outputs.outputs.rds_endpoint }}
+          ENV:      ${{ inputs.environment }}
+          DB_PASS:  ${{ secrets.TF_VAR_DB_PASSWORD }}
+          JWT_KEY:  ${{ secrets.SSM_JWT_SECRET_KEY }}
+          GME_PASS: ${{ secrets.SSM_GME_API_PASSWORD }}
+          TERNA_SC: ${{ secrets.SSM_TERNA_CLIENT_SECRET }}
+          HW_SC:    ${{ secrets.SSM_HUAWEI_CLIENT_SECRET }}
+        run: |
+          PREFIX="/vpp-italia/$ENV"
+          REGION="${{ env.AWS_REGION }}"
+
+          put_param() {
+            local name="$1" value="$2"
+            aws ssm put-parameter \
+              --name "$PREFIX/$name" \
+              --value "$value" \
+              --type SecureString \
+              --overwrite \
+              --region "$REGION" \
+              --no-cli-pager
+            echo "  SSM $PREFIX/$name → OK"
+          }
+
+          DB_URL="postgresql+asyncpg://vpp:${DB_PASS}@${RDS_EP}/vpp_italia"
+          put_param "database-url"        "$DB_URL"
+          put_param "jwt-secret-key"      "$JWT_KEY"
+          put_param "gme-api-password"    "$GME_PASS"
+          put_param "terna-client-secret" "$TERNA_SC"
+          put_param "huawei-client-secret" "$HW_SC"
+
+          echo "Paramètres SSM provisionnés." >> $GITHUB_STEP_SUMMARY
+
+      # ------------------------------------------------------------------
+      # Post-apply : attendre que l'API démarre et faire un smoke test
+      # ------------------------------------------------------------------
+      - name: Smoke test API
+        if: inputs.action == 'apply'
+        env:
+          EC2_IP: ${{ steps.tf_outputs.outputs.ec2_ip }}
+        run: |
+          echo "Attente démarrage API (EC2 userdata ~3min)..."
+          for i in $(seq 1 18); do
+            STATUS=$(curl -sf --max-time 5 "http://$EC2_IP:8000/health" \
+                     -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "API opérationnelle (tentative $i/18)"
+              curl -s "http://$EC2_IP:8000/health" | python3 -m json.tool
+              break
+            fi
+            echo "  [${i}/18] HTTP $STATUS — nouvelle tentative dans 10s..."
+            sleep 10
+          done
+
+          if [ "$STATUS" != "200" ]; then
+            echo "ERREUR : API non accessible après 3 minutes"
+            echo "Logs disponibles via : ssh ubuntu@$EC2_IP 'journalctl -u vpp-api -n 50'"
+            exit 1
+          fi
+
+      # ------------------------------------------------------------------
+      # Destroy — uniquement si action == destroy
+      # ------------------------------------------------------------------
+      - name: Terraform destroy
+        if: inputs.action == 'destroy'
+        run: |
+          echo "DESTRUCTION de l'infrastructure ${{ inputs.environment }}..."
+          terraform destroy \
+            -var-file=terraform.tfvars \
+            -input=false \
+            -auto-approve \
+            -no-color
+
+          echo "## Infrastructure ${{ inputs.environment }} détruite" >> $GITHUB_STEP_SUMMARY
+
+      # ------------------------------------------------------------------
+      # Nettoyage — toujours exécuté pour ne pas laisser de secrets sur le runner
+      # ------------------------------------------------------------------
+      - name: Nettoyer les fichiers sensibles
+        if: always()
+        run: rm -f terraform.tfvars tfplan

@@ -1,0 +1,127 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["claude/**", "feature/**", "fix/**"]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint & vérification de types
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint & type check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Installer les outils de qualité
+        run: pip install ruff mypy types-python-jose sqlalchemy[mypy]
+
+      - name: Ruff — vérification style
+        run: ruff check .
+
+      - name: Ruff — vérification format
+        run: ruff format --check .
+
+      - name: mypy — vérification types
+        run: mypy api/ core/ connectors/ data/
+
+  # ---------------------------------------------------------------------------
+  # Tests unitaires (sans BDD)
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lancer les tests unitaires
+        run: pytest tests/unit/ -v --cov=. --cov-report=xml --cov-fail-under=80
+        env:
+          JWT_SECRET_KEY: test-secret-key-ci
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          GME_API_BASE_URL: http://localhost:9999
+          GME_API_USERNAME: test
+          GME_API_PASSWORD: test
+          GME_PARTICIPANT_CODE: IT_TEST_001
+          TERNA_API_BASE_URL: http://localhost:9999
+          TERNA_CLIENT_ID: test
+          TERNA_CLIENT_SECRET: test
+          TERNA_UPCA_CODE: IT_UPCA_TEST
+
+      - name: Upload coverage vers Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unit
+
+  # ---------------------------------------------------------------------------
+  # Tests d'intégration (avec TimescaleDB réel)
+  # ---------------------------------------------------------------------------
+  integration-tests:
+    name: Tests d'intégration
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg15
+        env:
+          POSTGRES_USER: vpp
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: vpp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lancer les tests d'intégration
+        run: pytest tests/integration/ -v -m integration --timeout=60
+        env:
+          DATABASE_URL: postgresql+asyncpg://vpp:testpassword@localhost:5432/vpp_test
+          ALEMBIC_DATABASE_URL: postgresql://vpp:testpassword@localhost:5432/vpp_test
+          JWT_SECRET_KEY: test-secret-key-ci
+          GME_API_BASE_URL: http://localhost:9999
+          GME_API_USERNAME: test
+          GME_API_PASSWORD: test
+          GME_PARTICIPANT_CODE: IT_TEST_001
+          TERNA_API_BASE_URL: http://localhost:9999
+          TERNA_CLIENT_ID: test
+          TERNA_CLIENT_SECRET: test
+          TERNA_UPCA_CODE: IT_UPCA_TEST
