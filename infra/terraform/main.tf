@@ -6,13 +6,16 @@ terraform {
       version = "~> 5.0"
     }
   }
-  backend "s3" {
-    bucket         = "vpp-italia-terraform-state"
-    key            = "prod/terraform.tfstate"
-    region         = "eu-south-1"
-    encrypt        = true
-    dynamodb_table = "terraform-state-lock"
-  }
+
+  # Backend S3 pour stocker le state Terraform en équipe.
+  # À décommenter après avoir créé le bucket manuellement une première fois.
+  # backend "s3" {
+  #   bucket         = "vpp-italia-terraform-state"
+  #   key            = "prod/terraform.tfstate"
+  #   region         = "eu-south-1"
+  #   encrypt        = true
+  #   dynamodb_table = "terraform-state-lock"
+  # }
 }
 
 provider "aws" {
@@ -26,58 +29,243 @@ provider "aws" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# VPC
-# ---------------------------------------------------------------------------
+# =============================================================================
+# VPC — réseau dédié VPP Italia
+# =============================================================================
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
-  name = "vpp-italia-${var.environment}"
-  cidr = "10.0.0.0/16"
-
-  azs             = ["eu-south-1a", "eu-south-1b", "eu-south-1c"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
-
-  enable_nat_gateway     = true
-  single_nat_gateway     = var.environment != "production"
-  enable_dns_hostnames   = true
-  enable_dns_support     = true
+  tags = { Name = "vpp-italia-${var.environment}" }
 }
 
-# ---------------------------------------------------------------------------
-# RDS — PostgreSQL + TimescaleDB
-# ---------------------------------------------------------------------------
+# Sous-réseau public — EC2 API (accès Internet entrant)
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet_cidr
+  availability_zone       = "${var.aws_region}a"
+  map_public_ip_on_launch = true
 
-resource "aws_db_subnet_group" "main" {
-  name       = "vpp-italia-${var.environment}"
-  subnet_ids = module.vpc.private_subnets
+  tags = { Name = "vpp-public-${var.environment}" }
 }
 
-resource "aws_security_group" "rds" {
-  name        = "vpp-rds-${var.environment}"
-  description = "TimescaleDB access"
-  vpc_id      = module.vpc.vpc_id
+# Sous-réseau privé — RDS (aucun accès Internet direct)
+resource "aws_subnet" "private_a" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnet_cidr_a
+  availability_zone = "${var.aws_region}a"
+
+  tags = { Name = "vpp-private-a-${var.environment}" }
+}
+
+resource "aws_subnet" "private_b" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnet_cidr_b
+  availability_zone = "${var.aws_region}b"
+
+  tags = { Name = "vpp-private-b-${var.environment}" }
+}
+
+# Internet Gateway — sortie Internet pour le sous-réseau public
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+  tags   = { Name = "vpp-igw-${var.environment}" }
+}
+
+# Table de routage publique
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = { Name = "vpp-rt-public-${var.environment}" }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+# =============================================================================
+# Security Groups
+# =============================================================================
+
+# SG API — port 8000 ouvert en entrée, SSH restreint à l'IP admin
+resource "aws_security_group" "api" {
+  name        = "vpp-api-${var.environment}"
+  description = "FastAPI VPP — port 8000 public, SSH admin"
+  vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port   = 5432
-    to_port     = 5432
+    description = "API FastAPI"
+    from_port   = 8000
+    to_port     = 8000
     protocol    = "tcp"
-    cidr_blocks = [module.vpc.vpc_cidr_block]
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "SSH admin"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.admin_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "vpp-sg-api-${var.environment}" }
+}
+
+# SG RDS — port 5432 accessible uniquement depuis le SG de l'API
+resource "aws_security_group" "rds" {
+  name        = "vpp-rds-${var.environment}"
+  description = "TimescaleDB — accessible uniquement depuis l'EC2 API"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "PostgreSQL depuis API"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.api.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "vpp-sg-rds-${var.environment}" }
+}
+
+# =============================================================================
+# IAM — profil instance EC2
+# =============================================================================
+
+resource "aws_iam_role" "ec2_api" {
+  name = "vpp-ec2-api-${var.environment}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ec2_api_s3" {
+  name = "vpp-ec2-s3-${var.environment}"
+  role = aws_iam_role.ec2_api.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource = [
+          aws_s3_bucket.vpp.arn,
+          "${aws_s3_bucket.vpp.arn}/*"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = "arn:aws:secretsmanager:${var.aws_region}:*:secret:vpp-italia/${var.environment}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "ec2_api" {
+  name = "vpp-ec2-api-${var.environment}"
+  role = aws_iam_role.ec2_api.name
+}
+
+# =============================================================================
+# EC2 — serveur API FastAPI (t3.medium)
+# =============================================================================
+
+resource "aws_key_pair" "deploy" {
+  key_name   = "vpp-deploy-${var.environment}"
+  public_key = var.ec2_public_key
+}
+
+resource "aws_instance" "api" {
+  ami                    = var.ec2_ami_id
+  instance_type          = var.ec2_instance_type
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.api.id]
+  iam_instance_profile   = aws_iam_instance_profile.ec2_api.name
+  key_name               = aws_key_pair.deploy.key_name
+
+  root_block_device {
+    volume_type           = "gp3"
+    volume_size           = 30
+    encrypted             = true
+    delete_on_termination = true
+  }
+
+  user_data = templatefile("${path.module}/userdata.sh", {
+    environment    = var.environment
+    aws_region     = var.aws_region
+    s3_bucket_name = aws_s3_bucket.vpp.bucket
+  })
+
+  tags = { Name = "vpp-api-${var.environment}" }
+
+  lifecycle {
+    # Ne pas recréer l'instance si l'AMI change (déploiement via SSH)
+    ignore_changes = [ami, user_data]
   }
 }
 
+# IP Elastic pour une adresse publique stable
+resource "aws_eip" "api" {
+  instance = aws_instance.api.id
+  domain   = "vpc"
+  tags     = { Name = "vpp-eip-api-${var.environment}" }
+}
+
+# =============================================================================
+# RDS — PostgreSQL 15 / TimescaleDB (db.t3.micro)
+# =============================================================================
+
+resource "aws_db_subnet_group" "main" {
+  name       = "vpp-italia-${var.environment}"
+  subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+  tags       = { Name = "vpp-db-subnet-${var.environment}" }
+}
+
 resource "aws_db_instance" "timescaledb" {
-  identifier              = "vpp-italia-${var.environment}"
-  engine                  = "postgres"
-  engine_version          = "15.5"
-  instance_class          = var.db_instance_class
-  allocated_storage       = 100
-  max_allocated_storage   = 1000
-  storage_type            = "gp3"
-  storage_encrypted       = true
+  identifier        = "vpp-italia-${var.environment}"
+  engine            = "postgres"
+  engine_version    = "15.5"
+  instance_class    = var.db_instance_class
+  allocated_storage = 20
+  max_allocated_storage = 100
+  storage_type      = "gp3"
+  storage_encrypted = true
 
   db_name  = "vpp_italia"
   username = "vpp"
@@ -85,105 +273,127 @@ resource "aws_db_instance" "timescaledb" {
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
-  multi_az               = var.environment == "production"
+  multi_az               = false
   publicly_accessible    = false
   deletion_protection    = var.environment == "production"
   skip_final_snapshot    = var.environment != "production"
+  final_snapshot_identifier = var.environment == "production" ? "vpp-italia-final-snapshot" : null
 
   backup_retention_period = 7
   backup_window           = "02:00-03:00"
   maintenance_window      = "sun:03:00-sun:04:00"
+
+  # Paramètres TimescaleDB — nécessite un parameter group personnalisé
+  parameter_group_name = aws_db_parameter_group.timescaledb.name
+
+  tags = { Name = "vpp-rds-${var.environment}" }
 }
 
-# ---------------------------------------------------------------------------
-# ECS Fargate — API
-# ---------------------------------------------------------------------------
+resource "aws_db_parameter_group" "timescaledb" {
+  name   = "vpp-timescaledb-${var.environment}"
+  family = "postgres15"
 
-resource "aws_ecs_cluster" "main" {
-  name = "vpp-italia-${var.environment}"
+  parameter {
+    name  = "shared_preload_libraries"
+    value = "timescaledb"
+  }
 
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
+  parameter {
+    name  = "max_connections"
+    value = "200"
+  }
+
+  tags = { Name = "vpp-pg-timescaledb-${var.environment}" }
+}
+
+# =============================================================================
+# S3 — logs applicatifs et backups BDD
+# =============================================================================
+
+resource "aws_s3_bucket" "vpp" {
+  bucket        = "vpp-italia-${var.environment}-${var.aws_account_id}"
+  force_destroy = var.environment != "production"
+
+  tags = { Name = "vpp-s3-${var.environment}" }
+}
+
+resource "aws_s3_bucket_versioning" "vpp" {
+  bucket = aws_s3_bucket.vpp.id
+  versioning_configuration {
+    status = "Enabled"
   }
 }
 
-resource "aws_ecs_task_definition" "api" {
-  family                   = "vpp-api-${var.environment}"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = var.api_cpu
-  memory                   = var.api_memory
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
-  task_role_arn            = aws_iam_role.ecs_task.arn
-
-  container_definitions = jsonencode([
-    {
-      name      = "api"
-      image     = "${var.ecr_repository_url}:${var.image_tag}"
-      essential = true
-      portMappings = [{ containerPort = 8000, protocol = "tcp" }]
-      environment = [
-        { name = "APP_ENV", value = var.environment },
-        { name = "API_PORT", value = "8000" },
-      ]
-      secrets = [
-        { name = "DATABASE_URL", valueFrom = "${aws_secretsmanager_secret.db_url.arn}" },
-        { name = "JWT_SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.jwt_secret.arn}" },
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = "/ecs/vpp-api-${var.environment}"
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "api"
-        }
-      }
+resource "aws_s3_bucket_server_side_encryption_configuration" "vpp" {
+  bucket = aws_s3_bucket.vpp.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
     }
-  ])
+  }
 }
 
-# ---------------------------------------------------------------------------
-# Secrets Manager
-# ---------------------------------------------------------------------------
+resource "aws_s3_bucket_public_access_block" "vpp" {
+  bucket                  = aws_s3_bucket.vpp.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Lifecycle : logs conservés 30 jours, backups 90 jours puis Glacier
+resource "aws_s3_bucket_lifecycle_configuration" "vpp" {
+  bucket = aws_s3_bucket.vpp.id
+
+  rule {
+    id     = "logs-expiry"
+    status = "Enabled"
+    filter { prefix = "logs/" }
+    expiration { days = 30 }
+  }
+
+  rule {
+    id     = "backups-glacier"
+    status = "Enabled"
+    filter { prefix = "backups/" }
+    transition {
+      days          = 30
+      storage_class = "GLACIER"
+    }
+    expiration { days = 90 }
+  }
+}
+
+# =============================================================================
+# CloudWatch — logs API
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/vpp/api/${var.environment}"
+  retention_in_days = 30
+  tags              = { Name = "vpp-logs-api-${var.environment}" }
+}
+
+# =============================================================================
+# Secrets Manager — credentials applicatifs
+# =============================================================================
 
 resource "aws_secretsmanager_secret" "db_url" {
-  name = "vpp-italia/${var.environment}/database-url"
+  name                    = "vpp-italia/${var.environment}/database-url"
+  recovery_window_in_days = var.environment == "production" ? 7 : 0
 }
 
 resource "aws_secretsmanager_secret" "jwt_secret" {
-  name = "vpp-italia/${var.environment}/jwt-secret-key"
+  name                    = "vpp-italia/${var.environment}/jwt-secret-key"
+  recovery_window_in_days = var.environment == "production" ? 7 : 0
 }
 
-# ---------------------------------------------------------------------------
-# IAM roles (minimal)
-# ---------------------------------------------------------------------------
-
-resource "aws_iam_role" "ecs_execution" {
-  name = "vpp-ecs-execution-${var.environment}"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
+resource "aws_secretsmanager_secret" "gme_password" {
+  name                    = "vpp-italia/${var.environment}/gme-api-password"
+  recovery_window_in_days = var.environment == "production" ? 7 : 0
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_execution" {
-  role       = aws_iam_role.ecs_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-resource "aws_iam_role" "ecs_task" {
-  name = "vpp-ecs-task-${var.environment}"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
+resource "aws_secretsmanager_secret" "terna_client_secret" {
+  name                    = "vpp-italia/${var.environment}/terna-client-secret"
+  recovery_window_in_days = var.environment == "production" ? 7 : 0
 }

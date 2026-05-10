@@ -1,0 +1,160 @@
+name: Déploiement production
+
+on:
+  push:
+    branches: [main]
+
+# Un seul déploiement à la fois — annule le précédent si un nouveau push arrive
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false  # Laisser le déploiement en cours se terminer
+
+env:
+  AWS_REGION: eu-south-1
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate : les tests doivent passer avant tout déploiement
+  # ---------------------------------------------------------------------------
+  pre-deploy-tests:
+    name: Tests pré-déploiement
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg15
+        env:
+          POSTGRES_USER: vpp
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: vpp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Tests unitaires
+        run: pytest tests/unit/ -v --cov=. --cov-fail-under=80
+        env:
+          JWT_SECRET_KEY: test-secret-key-ci
+          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          GME_API_BASE_URL: http://localhost:9999
+          GME_API_USERNAME: test
+          GME_API_PASSWORD: test
+          GME_PARTICIPANT_CODE: IT_TEST_001
+          TERNA_API_BASE_URL: http://localhost:9999
+          TERNA_CLIENT_ID: test
+          TERNA_CLIENT_SECRET: test
+          TERNA_UPCA_CODE: IT_UPCA_TEST
+
+  # ---------------------------------------------------------------------------
+  # Déploiement EC2 via SSH
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Déployer sur EC2 (eu-south-1)
+    runs-on: ubuntu-latest
+    needs: pre-deploy-tests
+    environment: production  # Requiert une approbation manuelle dans GitHub
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Configurer les credentials AWS (pour vérifications post-déploiement)
+      - name: Configurer les credentials AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Récupérer l'IP publique de l'EC2 depuis les outputs Terraform
+      # (ou utiliser le secret EC2_HOST directement)
+      - name: Récupérer l'IP de l'instance EC2
+        id: get-ip
+        run: |
+          EC2_IP="${{ secrets.EC2_HOST }}"
+          echo "ec2_ip=$EC2_IP" >> $GITHUB_OUTPUT
+
+      # Écrire la clé SSH privée dans un fichier temporaire
+      - name: Configurer la clé SSH de déploiement
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ steps.get-ip.outputs.ec2_ip }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      # Vérifier que l'instance est accessible
+      - name: Vérifier la connectivité SSH
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o ConnectTimeout=10 \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ steps.get-ip.outputs.ec2_ip }} \
+              "echo 'Connexion SSH OK'"
+
+      # Lancer le script de déploiement sur l'EC2
+      - name: Déployer l'application
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              ubuntu@${{ steps.get-ip.outputs.ec2_ip }} \
+              "sudo /usr/local/bin/vpp-deploy"
+
+      # Vérifier que l'API répond après le déploiement
+      - name: Smoke test — vérifier l'API
+        run: |
+          sleep 10
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://${{ steps.get-ip.outputs.ec2_ip }}:8000/health || echo "000")
+          echo "HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "ERREUR : l'API ne répond pas (status $HTTP_STATUS)"
+            exit 1
+          fi
+          echo "API opérationnelle."
+
+      # Nettoyage de la clé SSH
+      - name: Nettoyer la clé SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+      # Notifier en cas d'échec
+      - name: Notifier l'échec du déploiement
+        if: failure()
+        run: |
+          echo "DÉPLOIEMENT ÉCHOUÉ — commit ${{ github.sha }}"
+          echo "Auteur : ${{ github.actor }}"
+          echo "Message : ${{ github.event.head_commit.message }}"
+          # Intégrer ici une notification Slack/PagerDuty si nécessaire
+
+  # ---------------------------------------------------------------------------
+  # Résumé post-déploiement
+  # ---------------------------------------------------------------------------
+  post-deploy:
+    name: Résumé déploiement
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+
+    steps:
+      - name: Résumé
+        run: |
+          echo "## Déploiement VPP Italia" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit** : ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Auteur** : ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Statut** : ${{ needs.deploy.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Heure** : $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
