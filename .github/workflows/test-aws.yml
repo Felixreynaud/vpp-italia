@@ -5,22 +5,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test identity
+      - name: Test AWS with Python
+        run: |
+          pip install boto3
+          python3 -c "
+          import boto3
+          import os
+          client = boto3.client(
+            'sts',
+            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+            region_name='us-east-1'
+          )
+          print(client.get_caller_identity())
+          "
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
-        run: |
-          if which aws && aws --version; then
-            echo "--- AWS CLI disponible ---"
-            aws sts get-caller-identity
-          else
-            echo "--- AWS CLI introuvable, fallback boto3 ---"
-            pip install boto3 -q
-            python3 - <<'EOF'
-          import boto3, json
-          client = boto3.client('sts')
-          identity = client.get_caller_identity()
-          print(json.dumps(identity, default=str, indent=2))
-          EOF
-          fi
