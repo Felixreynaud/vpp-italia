@@ -1,0 +1,93 @@
+groups:
+  - name: vpp_battery_alerts
+    interval: 30s
+    rules:
+      - alert: BatteryOffline
+        expr: |
+          (time() - vpp_battery_last_contact_timestamp_seconds) > 60
+        for: 1m
+        labels:
+          severity: critical
+          team: operations
+        annotations:
+          summary: "Battery {{ $labels.battery_id }} is offline"
+          description: "No telemetry received from battery {{ $labels.battery_id }} for {{ $value | humanizeDuration }}. Safe state should have been triggered."
+
+      - alert: BatterySoCCriticalLow
+        expr: vpp_battery_soc_percent < 12
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Battery {{ $labels.battery_id }} SoC critically low"
+          description: "Battery SoC is {{ $value }}% — approaching minimum threshold of 10%."
+
+      - alert: BatterySoCCriticalHigh
+        expr: vpp_battery_soc_percent > 88
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Battery {{ $labels.battery_id }} SoC critically high"
+          description: "Battery SoC is {{ $value }}% — approaching maximum threshold of 90%."
+
+      - alert: BatteryTemperatureHigh
+        expr: vpp_battery_temperature_celsius > 45
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Battery {{ $labels.battery_id }} overheating"
+          description: "Battery temperature is {{ $value }}°C. Threshold is 45°C."
+
+      - alert: BatteryFaultState
+        expr: vpp_battery_state{state="fault"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          page: "true"
+        annotations:
+          summary: "Battery {{ $labels.battery_id }} in FAULT state"
+          description: "Battery has reported a fault condition — immediate intervention required."
+
+  - name: vpp_market_alerts
+    rules:
+      - alert: MarketSubmissionFailed
+        expr: increase(vpp_market_submission_errors_total[5m]) > 0
+        labels:
+          severity: critical
+          page: "true"
+        annotations:
+          summary: "Market offer submission failed ({{ $labels.market }})"
+          description: "{{ $value }} submission errors in the last 5 minutes for market {{ $labels.market }}."
+
+      - alert: MarketDeadlineApproaching
+        expr: vpp_market_deadline_seconds_remaining < 600
+        labels:
+          severity: warning
+        annotations:
+          summary: "Market deadline approaching ({{ $labels.market }})"
+          description: "Only {{ $value | humanizeDuration }} remaining before {{ $labels.market }} submission deadline."
+
+  - name: vpp_api_alerts
+    rules:
+      - alert: APIHighErrorRate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m])
+          / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "VPP API error rate above 5%"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: APIHighLatency
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency above 2 seconds"
+          description: "p95 latency is {{ $value }}s."

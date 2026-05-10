@@ -1,0 +1,116 @@
+"""VPP Italia — FastAPI application entry point."""
+
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+import structlog
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+
+from api.dependencies import close_db, init_db
+from api.routes import batteries, dispatch, markets
+from core.scheduler import MarketScheduler
+
+logger = structlog.get_logger(__name__)
+
+_scheduler: MarketScheduler | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global _scheduler
+
+    logger.info("vpp.startup", version=app.version)
+    await init_db()
+
+    _scheduler = MarketScheduler()
+    await _scheduler.start()
+
+    yield
+
+    logger.info("vpp.shutdown")
+    if _scheduler:
+        await _scheduler.stop()
+    await close_db()
+
+
+app = FastAPI(
+    title="VPP Italia API",
+    description=(
+        "API de pilotage pour centrale virtuelle (VPP) — "
+        "100+ batteries industrielles, marchés GME et Terna."
+    ),
+    version="0.1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
+)
+
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics")
+
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+
+API_PREFIX = "/api/v1"
+
+app.include_router(batteries.router, prefix=API_PREFIX, tags=["batteries"])
+app.include_router(dispatch.router, prefix=API_PREFIX, tags=["dispatch"])
+app.include_router(markets.router, prefix=API_PREFIX, tags=["markets"])
+
+# ---------------------------------------------------------------------------
+# Health & root
+# ---------------------------------------------------------------------------
+
+
+@app.get("/health", include_in_schema=False)
+async def health() -> dict:
+    return {"status": "ok", "version": app.version}
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> dict:
+    return {"name": "VPP Italia API", "version": app.version, "docs": "/docs"}
+
+
+# ---------------------------------------------------------------------------
+# Global exception handler — RFC 7807 Problem Details
+# ---------------------------------------------------------------------------
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("unhandled_exception", path=request.url.path, exc=str(exc))
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "type": "about:blank",
+            "title": "Internal Server Error",
+            "status": 500,
+            "detail": "An unexpected error occurred.",
+            "instance": str(request.url),
+        },
+    )
