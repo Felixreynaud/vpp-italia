@@ -35,8 +35,10 @@ jobs:
     name: Terraform ${{ inputs.action }} (${{ inputs.environment }})
     runs-on: ubuntu-latest
 
-    # Protection supplémentaire : destroy en production nécessite une approbation
-    environment: ${{ inputs.action == 'destroy' && 'production-destroy' || inputs.environment }}
+    # Protection supplémentaire : destroy en production nécessite une approbation.
+    # Mettre en commentaire si les GitHub Environments (staging/production) ne sont pas configurés —
+    # dans ce cas les secrets sont lus au niveau du dépôt (Settings → Secrets → Actions).
+    # environment: ${{ inputs.action == 'destroy' && 'production-destroy' || inputs.environment }}
 
     defaults:
       run:
@@ -54,7 +56,8 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: eu-south-1
+          mask-aws-account-id: 'true'
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
@@ -78,13 +81,13 @@ jobs:
       # ------------------------------------------------------------------
       - name: Create terraform.tfvars
         run: |
-          cat > terraform.tfvars <<TFVARS
-          aws_account_id = "${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}"
-          environment    = "${{ inputs.environment }}"
-          db_password    = "${{ secrets.TF_VAR_DB_PASSWORD }}"
-          ec2_public_key = "${{ secrets.TF_VAR_EC2_PUBLIC_KEY }}"
-          admin_cidr     = "${{ secrets.TF_VAR_ADMIN_CIDR }}"
-          TFVARS
+          cat > terraform.tfvars <<'TFVARS'
+aws_account_id = "${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}"
+environment    = "${{ inputs.environment }}"
+db_password    = "${{ secrets.TF_VAR_DB_PASSWORD }}"
+ec2_public_key = "${{ secrets.TF_VAR_EC2_PUBLIC_KEY }}"
+admin_cidr     = "${{ secrets.TF_VAR_ADMIN_CIDR }}"
+TFVARS
 
       # ------------------------------------------------------------------
       # Init — toujours exécuté
