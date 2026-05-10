@@ -32,5 +32,8 @@ aiokafka==0.11.0
 prometheus-fastapi-instrumentator==7.0.0
 structlog==24.4.0
 
+# Italian electricity market prices
+mercati-energetici==1.1.0
+
 # Scheduling
 zoneinfo; python_version < "3.9"
