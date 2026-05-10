@@ -10,4 +10,17 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
-        run: aws sts get-caller-identity
+        run: |
+          if which aws && aws --version; then
+            echo "--- AWS CLI disponible ---"
+            aws sts get-caller-identity
+          else
+            echo "--- AWS CLI introuvable, fallback boto3 ---"
+            pip install boto3 -q
+            python3 - <<'EOF'
+          import boto3, json
+          client = boto3.client('sts')
+          identity = client.get_caller_identity()
+          print(json.dumps(identity, default=str, indent=2))
+          EOF
+          fi
