@@ -7,7 +7,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
@@ -26,8 +25,8 @@ class TaskStatus(IntEnum):
 
 
 class BatteryDevType(IntEnum):
-    BATTERY_UNIT = 39   # Individual battery string / module
-    ESS_SYSTEM = 41     # Energy Storage System (plant-level)
+    BATTERY_UNIT = 39  # Individual battery string / module
+    ESS_SYSTEM = 41  # Energy Storage System (plant-level)
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +65,7 @@ class HuaweiPlant(BaseModel):
     grid_connection_date: str | None = None
 
     @classmethod
-    def from_api(cls, raw: dict[str, Any]) -> "HuaweiPlant":
+    def from_api(cls, raw: dict[str, Any]) -> HuaweiPlant:
         return cls(
             plant_code=raw["stationCode"],
             plant_name=raw.get("stationName", ""),
@@ -96,7 +95,7 @@ class HuaweiDevice(BaseModel):
     software_version: str | None = None
 
     @classmethod
-    def from_api(cls, raw: dict[str, Any], plant_code: str) -> "HuaweiDevice":
+    def from_api(cls, raw: dict[str, Any], plant_code: str) -> HuaweiDevice:
         return cls(
             device_id=str(raw["devDn"]),
             device_name=raw.get("devName", ""),
@@ -129,7 +128,9 @@ class HuaweiBatteryStatus(BaseModel):
     temperature_c: float | None = Field(default=None, description="Cell temperature in °C")
     soh: float | None = Field(default=None, ge=0, le=100, description="State of Health %")
     status: int | None = Field(default=None, description="Huawei device status code")
-    dispatch_switch: int = Field(default=0, description="Active dispatch command: 0=stop, 1=charge, 2=discharge")
+    dispatch_switch: int = Field(
+        default=0, description="Active dispatch command: 0=stop, 1=charge, 2=discharge"
+    )
     # Derived
     is_charging: bool = False
     is_discharging: bool = False
@@ -139,7 +140,9 @@ class HuaweiBatteryStatus(BaseModel):
         object.__setattr__(self, "is_discharging", self.power_kw < 0)
 
     @classmethod
-    def from_kpi(cls, device_id: str, kpi: dict[str, Any], plant_code: str | None = None) -> "HuaweiBatteryStatus":
+    def from_kpi(
+        cls, device_id: str, kpi: dict[str, Any], plant_code: str | None = None
+    ) -> HuaweiBatteryStatus:
         """Parse a single KPI dict from getDevRealKpi response."""
         # Huawei uses positive = discharge internally for some firmware versions;
         # we normalise to positive = charge at this boundary.
@@ -187,7 +190,9 @@ class HuaweiDispatchTask(BaseModel):
         return self.status == TaskStatus.TIMEOUT
 
     @classmethod
-    def from_status_response(cls, request_id: str, plant_code: str, raw: dict[str, Any]) -> "HuaweiDispatchTask":
+    def from_status_response(
+        cls, request_id: str, plant_code: str, raw: dict[str, Any]
+    ) -> HuaweiDispatchTask:
         return cls(
             request_id=request_id,
             plant_code=plant_code,

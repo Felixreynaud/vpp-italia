@@ -31,7 +31,10 @@ class GMEClient:
             token = await self._authenticate()
             self._client = httpx.AsyncClient(
                 base_url=self._base_url,
-                headers={"Authorization": f"Bearer {token}", "X-Participant-Code": self._participant_code},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "X-Participant-Code": self._participant_code,
+                },
                 timeout=30.0,
             )
         return self._client
@@ -49,7 +52,7 @@ class GMEClient:
             resp.raise_for_status()
             return resp.json()["access_token"]
 
-    async def submit_offer(self, offer: "MarketOfferCreate") -> str:
+    async def submit_offer(self, offer: MarketOfferCreate) -> str:
         """Submit a market offer and return the external offer ID."""
         payload = self._build_payload(offer)
         client = await self._get_client()
@@ -75,7 +78,7 @@ class GMEClient:
         resp.raise_for_status()
         logger.info("gme.offer_cancelled", external_id=external_id)
 
-    def _build_payload(self, offer: "MarketOfferCreate") -> dict[str, Any]:
+    def _build_payload(self, offer: MarketOfferCreate) -> dict[str, Any]:
         return {
             "market": offer.market,
             "deliveryDate": str(offer.delivery_date),

@@ -57,7 +57,7 @@ class HuaweiBatteryClient:
         self._pending_tasks: dict[str, str] = {}  # plant_code → request_id
 
     @classmethod
-    def from_env(cls) -> "HuaweiBatteryClient":
+    def from_env(cls) -> HuaweiBatteryClient:
         import os
 
         domain = os.environ["HUAWEI_DOMAIN"]
@@ -122,7 +122,9 @@ class HuaweiBatteryClient:
                 if fail_code == 305:
                     self._auth.invalidate()
                     raise HuaweiAuthError("Session expired (305)", fail_code=305)
-                raise HuaweiAPIError.from_fail_code(fail_code, detail=str(body.get("message") or ""))
+                raise HuaweiAPIError.from_fail_code(
+                    fail_code, detail=str(body.get("message") or "")
+                )
 
         return body.get("data")
 
@@ -250,7 +252,7 @@ class HuaweiBatteryClient:
         return await self._send_dispatch(
             plant_code=plant_code,
             switch=DispatchSwitch.CHARGE,
-            power_w=power_w,           # positive → charge
+            power_w=power_w,  # positive → charge
             duration_min=duration_min,
             target_soc=target_soc,
         )
@@ -269,12 +271,14 @@ class HuaweiBatteryClient:
         Raises HuaweiTaskError if a task is already in progress for this plant.
         """
         if power_w <= 0:
-            raise ValueError(f"discharge() requires power_w > 0 (sign is applied internally), got {power_w}")
+            raise ValueError(
+                f"discharge() requires power_w > 0 (sign is applied internally), got {power_w}"
+            )
         self._assert_no_pending_task(plant_code)
         return await self._send_dispatch(
             plant_code=plant_code,
             switch=DispatchSwitch.DISCHARGE,
-            power_w=-power_w,          # negative → discharge (per Huawei spec)
+            power_w=-power_w,  # negative → discharge (per Huawei spec)
             duration_min=duration_min,
             target_soc=target_soc,
         )
@@ -342,7 +346,7 @@ class HuaweiBatteryClient:
             "v1/vpp/chargeAndDischargeStatus",
             {"requestId": request_id, "stationCode": plant_code},
         )
-        raw = (data or {})
+        raw = data or {}
         task = HuaweiDispatchTask.from_status_response(request_id, plant_code, raw)
 
         if task.is_complete or task.is_timed_out:

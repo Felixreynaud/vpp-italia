@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 import structlog
@@ -69,10 +69,7 @@ class HuaweiAuthClient:
     # ------------------------------------------------------------------
 
     def _is_valid(self) -> bool:
-        return (
-            self._cache is not None
-            and time.monotonic() < self._cache.expires_at - 60
-        )
+        return self._cache is not None and time.monotonic() < self._cache.expires_at - 60
 
     async def _fetch(self) -> str:
         url = f"https://{self._domain}{self.AUTH_PATH}"
