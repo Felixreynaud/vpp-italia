@@ -102,6 +102,8 @@ jobs:
 
       # ------------------------------------------------------------------
       # Plan - toujours execute (affiche en resume du job)
+      # Pour action == apply, le plan est re-execute dans le step apply
+      # afin que l etat soit toujours frais (apres les imports).
       # ------------------------------------------------------------------
       - name: Terraform plan
         id: plan
@@ -109,7 +111,6 @@ jobs:
           terraform plan \
             -var-file=terraform.tfvars \
             -input=false \
-            -out=tfplan \
             -no-color \
             2>&1 | tee plan_output.txt
 
@@ -146,11 +147,16 @@ jobs:
 
       # ------------------------------------------------------------------
       # Apply - uniquement si action == apply
+      # Plan + apply dans la meme execution pour garantir un etat frais.
       # ------------------------------------------------------------------
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: |
-          terraform apply -input=false -auto-approve tfplan
+          terraform apply \
+            -var-file=terraform.tfvars \
+            -input=false \
+            -auto-approve \
+            -no-color
           echo "## Apply termine" >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
