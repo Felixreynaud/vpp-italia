@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -36,7 +37,7 @@ class PeakShavingResult:
     achat_reseau_kw: list[float]  # Grid purchases needed each hour
     taux_autoconsommation_pct: float  # % of PV consumed locally
     economie_estimee_eur: float  # vs baseline (no battery)
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class PeakShavingOptimizer:

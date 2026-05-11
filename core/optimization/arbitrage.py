@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import statistics
 from dataclasses import dataclass, field
+from typing import Any
 
 from core.dispatch.models import BatterySpec, DailySchedule
 from core.dispatch.optimizer import DispatchOptimizer
@@ -41,7 +42,7 @@ class ArbitrageResult:
     revenu_estime_eur: float
     sharpe_ratio: float  # annualised Sharpe proxy
     cvar_95_eur: float  # expected loss in worst 5% scenarios
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class ArbitrageOptimizer:

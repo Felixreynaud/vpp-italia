@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from typing import Any
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
@@ -37,7 +38,7 @@ class CommandResult:
 class DispatchExecutor:
     """Sends setpoint commands to all batteries for a given QH."""
 
-    def __init__(self, connector_factory: Callable) -> None:
+    def __init__(self, connector_factory: Callable[..., Any]) -> None:
         self._connector_factory = connector_factory
         self._last_contact: dict[UUID, datetime] = {}
 
@@ -70,9 +71,7 @@ class DispatchExecutor:
             logger.error("dispatch.command_timeout", battery_id=str(command.battery_id))
             return CommandResult(battery_id=command.battery_id, success=False, error="timeout")
         except Exception as e:
-            logger.error(
-                "dispatch.command_error", battery_id=str(command.battery_id), error=str(e)
-            )
+            logger.error("dispatch.command_error", battery_id=str(command.battery_id), error=str(e))
             return CommandResult(battery_id=command.battery_id, success=False, error=str(e))
 
     def is_stale(self, battery_id: UUID) -> bool:

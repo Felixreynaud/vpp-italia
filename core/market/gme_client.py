@@ -68,7 +68,7 @@ class GMEPriceClient:
         zone: str | None = None,
         db_session: Any = None,
     ) -> None:
-        self._zone = (zone or os.getenv("GME_ZONE", "SUD")).upper()
+        self._zone = (zone if zone is not None else (os.getenv("GME_ZONE") or "SUD")).upper()
         self._db = db_session
         self._cache: dict[str, list[HourlyPrice]] = {}  # key → prices
 
@@ -177,7 +177,7 @@ class GMEPriceClient:
         mgp = MGP()
         # The library returns a list of dicts with keys varying by version;
         # we handle both the legacy and current format.
-        raw: list[dict] = await asyncio.to_thread(mgp.get_prices, target)
+        raw: list[dict[str, Any]] = await asyncio.to_thread(mgp.get_prices, target)
 
         return self._parse_raw_prices(raw, market="MGP", target=target)
 
@@ -190,12 +190,10 @@ class GMEPriceClient:
         # MI sessions are named MI-A1..MI-A7; the library may use MIA1..MIA7
         session_code = session.replace("-", "")
         mi = MI(session=session_code)
-        raw: list[dict] = await asyncio.to_thread(mi.get_prices, target)
+        raw: list[dict[str, Any]] = await asyncio.to_thread(mi.get_prices, target)
         return self._parse_raw_prices(raw, market=session, target=target)
 
-    def _parse_raw_prices(
-        self, raw: list[dict], market: str, target: date
-    ) -> list[HourlyPrice]:
+    def _parse_raw_prices(self, raw: list[dict[str, Any]], market: str, target: date) -> list[HourlyPrice]:
         """Normalise the library's raw response into HourlyPrice objects.
 
         The library may return hour as 1-24 (Italian convention) or 0-23.
@@ -240,9 +238,7 @@ class GMEPriceClient:
         yesterday = target - timedelta(days=1)
         cache_key = f"{market.lower()}:{yesterday}:{self._zone}"
         if cache_key in self._cache:
-            logger.warning(
-                "gme.using_fallback_prices", target=str(target), fallback=str(yesterday)
-            )
+            logger.warning("gme.using_fallback_prices", target=str(target), fallback=str(yesterday))
             return [
                 HourlyPrice(
                     hour=p.hour,

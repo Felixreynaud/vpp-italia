@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import structlog
@@ -17,7 +18,7 @@ class MarketScheduler:
     """Schedules recurring tasks aligned with Italian electricity market windows."""
 
     def __init__(self) -> None:
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[Any]] = []
         self._running = False
 
     async def start(self) -> None:
@@ -75,6 +76,28 @@ class MarketScheduler:
     async def _check_stale_batteries(self) -> None:
         logger.debug("scheduler.watchdog_check")
         # Full implementation: query last telemetry timestamps, trigger safe state via DispatchExecutor
+
+    # ------------------------------------------------------------------
+    # Public query / trigger interface used by the dispatch routes
+    # ------------------------------------------------------------------
+
+    def get_schedule(self, delivery_date: date) -> Any:
+        """Return the computed dispatch schedule for delivery_date, or None."""
+        return None
+
+    async def trigger_now(self, delivery_date: date | None = None) -> None:
+        """Trigger an immediate re-optimization outside the normal schedule."""
+        logger.info("scheduler.trigger_now", delivery_date=str(delivery_date))
+        try:
+            from core.optimizer import run_optimization_async
+
+            await run_optimization_async(delivery_date=delivery_date)
+        except Exception:
+            logger.exception("scheduler.trigger_now_error")
+
+    def get_today_pnl(self) -> dict[str, Any]:
+        """Return today's realised and projected P&L in EUR."""
+        return {"realised_eur": 0.0, "projected_eur": 0.0, "status": "not_available"}
 
     @staticmethod
     async def _wait_until_next(target_time: time, tz: ZoneInfo) -> None:

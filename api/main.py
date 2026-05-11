@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import structlog
 from fastapi import FastAPI, Request, status
@@ -74,7 +75,7 @@ app.include_router(optimization_router)
 
 
 @app.get("/", include_in_schema=False)
-async def root() -> dict:
+async def root() -> dict[str, Any]:
     return {"name": "VPP Italia API", "version": app.version, "docs": "/docs"}
 
 

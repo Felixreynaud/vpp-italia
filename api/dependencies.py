@@ -1,7 +1,7 @@
 """Shared FastAPI dependencies: DB session, authentication."""
 
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, Any
 
 import structlog
 from fastapi import Depends, HTTPException, status
@@ -15,7 +15,7 @@ logger = structlog.get_logger(__name__)
 
 # Populated at startup via init_db()
 _engine = None
-_session_factory: async_sessionmaker | None = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
@@ -59,7 +59,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dict:
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dict[str, Any]:
     import os
 
     credentials_exception = HTTPException(
@@ -81,4 +81,4 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
         raise credentials_exception from None
 
 
-CurrentUser = Annotated[dict, Depends(get_current_user)]
+CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]

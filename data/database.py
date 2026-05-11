@@ -1,5 +1,7 @@
 """Database utilities and TimescaleDB hypertable setup."""
 
+from typing import Any
+
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +43,7 @@ async def setup_timescaledb(session: AsyncSession) -> None:
         await session.rollback()
 
 
-async def get_latest_readings(session: AsyncSession, battery_ids: list[str]) -> list[dict]:
+async def get_latest_readings(session: AsyncSession, battery_ids: list[str]) -> list[dict[str, Any]]:
     """Fetch the most recent reading for each battery (uses TimescaleDB last() aggregate)."""
     sql = text("""
         SELECT DISTINCT ON (battery_id)
@@ -67,7 +69,7 @@ async def get_aggregate_readings(
     start: str,
     end: str,
     bucket: str = "15 minutes",
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Time-bucketed aggregate — uses TimescaleDB time_bucket for efficiency."""
     sql = text("""
         SELECT

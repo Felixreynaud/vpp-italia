@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from pymodbus.client import AsyncModbusTcpClient
@@ -34,13 +34,13 @@ class ModbusReading:
     current_a: float | None
     temperature_c: float | None
     status_code: int | None
-    raw: dict
+    raw: dict[str, Any]
 
 
 async def read_battery(battery: Battery, timeout: float = 5.0) -> ModbusReading:
     """Poll a battery over Modbus TCP and return a structured reading."""
     client = AsyncModbusTcpClient(str(battery.host), port=battery.port, timeout=timeout)
-    raw: dict = {}
+    raw: dict[str, Any] = {}
     try:
         await client.connect()
         if not client.connected:

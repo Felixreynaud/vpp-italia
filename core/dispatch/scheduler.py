@@ -57,11 +57,11 @@ class DispatchScheduler:
         self._gme = gme_client
         self._huawei = huawei_client
         self._optimizer = optimizer or DispatchOptimizer()
-        self._zone = (zone or os.getenv("GME_ZONE", "SUD")).upper()
+        self._zone = (zone if zone is not None else (os.getenv("GME_ZONE") or "SUD")).upper()
 
         self._schedules: dict[date, DailySchedule] = {}
         self._dispatch_logs: list[DispatchLog] = []
-        self._tasks: list[asyncio.Task] = []
+        self._tasks: list[asyncio.Task[Any]] = []
         self._running = False
 
     # ------------------------------------------------------------------
@@ -140,17 +140,13 @@ class DispatchScheduler:
             schedule = self._schedules.get(today)
 
             if not schedule:
-                logger.warning(
-                    "dispatch_scheduler.no_schedule", date=str(today), hour=current_hour
-                )
+                logger.warning("dispatch_scheduler.no_schedule", date=str(today), hour=current_hour)
                 continue
 
             try:
                 await self._execute_hour(schedule, current_hour)
             except Exception:
-                logger.exception(
-                    "dispatch_scheduler.hourly_dispatch_error", hour=current_hour
-                )
+                logger.exception("dispatch_scheduler.hourly_dispatch_error", hour=current_hour)
 
     async def _execute_hour(self, schedule: DailySchedule, hour: int) -> None:
         hourly = schedule.hours.get(hour)
@@ -362,9 +358,7 @@ class DispatchScheduler:
     @staticmethod
     async def _wait_until(target: time) -> None:
         now = datetime.now(TZ_ROME)
-        next_run = now.replace(
-            hour=target.hour, minute=target.minute, second=0, microsecond=0
-        )
+        next_run = now.replace(hour=target.hour, minute=target.minute, second=0, microsecond=0)
         if next_run <= now:
             next_run += timedelta(days=1)
         await asyncio.sleep((next_run - now).total_seconds())

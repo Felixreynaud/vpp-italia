@@ -31,7 +31,7 @@ class VPPChargePoint(CP):
 
     @on(Action.BootNotification)
     async def on_boot_notification(
-        self, charging_station: dict, reason: str, **kwargs: Any
+        self, charging_station: dict[str, Any], reason: str, **kwargs: Any
     ) -> call_result.BootNotification:
         from datetime import datetime
 
@@ -49,7 +49,7 @@ class VPPChargePoint(CP):
 
     @on(Action.MeterValues)
     async def on_meter_values(
-        self, evse_id: int, meter_value: list, **kwargs: Any
+        self, evse_id: int, meter_value: list[Any], **kwargs: Any
     ) -> call_result.MeterValues:
         logger.debug("ocpp.meter_values", charge_point_id=self.id, evse_id=evse_id)
         # Parse meter values and publish to Kafka
@@ -105,9 +105,7 @@ class OCPPServer:
         ):
             await asyncio.Future()
 
-    async def _on_connect(
-        self, websocket: websockets.WebSocketServerProtocol, path: str
-    ) -> None:
+    async def _on_connect(self, websocket: websockets.WebSocketServerProtocol, path: str) -> None:
         charge_point_id = path.strip("/").split("/")[-1]
         cp = VPPChargePoint(charge_point_id, websocket)
         self._charge_points[charge_point_id] = cp

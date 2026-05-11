@@ -9,6 +9,7 @@ from __future__ import annotations
 import random
 import statistics
 from dataclasses import dataclass, field
+from typing import Any
 
 from core.dispatch.models import BatterySpec, DailySchedule
 from core.optimization.arbitrage import ArbitrageInput, ArbitrageOptimizer
@@ -35,7 +36,7 @@ class StochasticResult:
     revenu_espere_eur: float
     risque_p95_eur: float  # 95th-pct loss vs expected
     scenarios_revenus: list[float]  # per-scenario revenues
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class StochasticOptimizer:

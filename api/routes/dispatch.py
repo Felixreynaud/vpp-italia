@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
@@ -70,7 +70,7 @@ async def get_plan(
 async def trigger_optimization(
     _user: CurrentUser,
     delivery_date: Annotated[date | None, Query()] = None,
-) -> dict:
+) -> dict[str, Any]:
     from core.optimizer import run_optimization_async
 
     task_id = await run_optimization_async(delivery_date=delivery_date)
@@ -87,7 +87,7 @@ async def trigger_optimization(
 
 
 @router.get("/prices/today")
-async def get_prices_today(_user: CurrentUser) -> dict:
+async def get_prices_today(_user: CurrentUser) -> dict[str, Any]:
     """Return MGP hourly prices for today (24 hours, EUR/MWh)."""
     import os
     from datetime import datetime
@@ -114,7 +114,7 @@ async def get_prices_today(_user: CurrentUser) -> dict:
 
 
 @router.get("/prices/tomorrow")
-async def get_prices_tomorrow(_user: CurrentUser) -> dict:
+async def get_prices_tomorrow(_user: CurrentUser) -> dict[str, Any]:
     """Return MGP hourly prices for tomorrow (published daily ~13:00 CET)."""
     import os
     from datetime import datetime, timedelta
@@ -147,7 +147,7 @@ async def get_prices_tomorrow(_user: CurrentUser) -> dict:
 
 
 @router.get("/schedule/today")
-async def get_schedule_today(_user: CurrentUser) -> dict:
+async def get_schedule_today(_user: CurrentUser) -> dict[str, Any]:
     """Return the optimizer's dispatch schedule for today."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -174,10 +174,10 @@ async def get_schedule_today(_user: CurrentUser) -> dict:
 
 @router.post("/schedule/force", status_code=status.HTTP_202_ACCEPTED)
 async def force_schedule(
-    payload: dict,
+    payload: dict[str, Any],
     _user: CurrentUser,
     background_tasks: BackgroundTasks,
-) -> dict:
+) -> dict[str, Any]:
     """Trigger an immediate re-optimization and override the current schedule.
 
     Body: {"delivery_date": "YYYY-MM-DD"} — omit for today+1.
@@ -209,7 +209,7 @@ async def force_schedule(
 
 
 @router.get("/pnl")
-async def get_pnl(_user: CurrentUser) -> dict:
+async def get_pnl(_user: CurrentUser) -> dict[str, Any]:
     """Return today's realised P&L and projected end-of-day P&L in EUR."""
     from api.main import _scheduler
 
@@ -230,10 +230,10 @@ async def get_pnl(_user: CurrentUser) -> dict:
 
 @router.post("/backtest", status_code=status.HTTP_202_ACCEPTED)
 async def run_backtest(
-    payload: dict,
+    payload: dict[str, Any],
     _user: CurrentUser,
     background_tasks: BackgroundTasks,
-) -> dict:
+) -> dict[str, Any]:
     """Launch a backtest simulation over a historical period.
 
     Body:
