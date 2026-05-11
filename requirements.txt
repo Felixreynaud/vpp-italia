@@ -33,7 +33,7 @@ prometheus-fastapi-instrumentator==7.0.0
 structlog==24.4.0
 
 # Italian electricity market prices
-mercati-energetici==1.1.0
+mercati-energetici
 
 # Scheduling
 zoneinfo; python_version < "3.9"
