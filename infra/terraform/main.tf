@@ -256,7 +256,7 @@ resource "aws_eip" "api" {
 }
 
 # =============================================================================
-# RDS - PostgreSQL 15 / TimescaleDB (db.t3.micro)
+# RDS - PostgreSQL 15
 # =============================================================================
 
 resource "aws_db_subnet_group" "main" {
@@ -291,7 +291,6 @@ resource "aws_db_instance" "timescaledb" {
   backup_window           = "02:00-03:00"
   maintenance_window      = "sun:03:00-sun:04:00"
 
-  # Parametres TimescaleDB - necessite un parameter group personnalise
   parameter_group_name = aws_db_parameter_group.timescaledb.name
 
   tags = { Name = "vpp-rds-${var.environment}" }
@@ -303,7 +302,7 @@ resource "aws_db_parameter_group" "timescaledb" {
 
   parameter {
     name         = "shared_preload_libraries"
-    value        = "timescaledb"
+    value        = "pg_stat_statements"
     apply_method = "pending-reboot"
   }
 

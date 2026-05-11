@@ -122,28 +122,30 @@ jobs:
       # ------------------------------------------------------------------
       # Import - ressources existantes a integrer dans le state
       # Execute uniquement si action == apply
-      # Chaque import est tolerant a l echec (|| true) car la ressource
-      # peut deja etre dans le state lors des runs suivants.
+      # Chaque import est tolerant a l echec (|| true) : idempotent.
       # ------------------------------------------------------------------
       - name: Terraform import ressources existantes
         if: inputs.action == 'apply'
+        env:
+          TF_VAR_AWS_ACCOUNT_ID: ${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}
         run: |
           ENV="${{ inputs.environment }}"
+          ACCOUNT_ID="${TF_VAR_AWS_ACCOUNT_ID}"
 
-          terraform import -var-file=terraform.tfvars -input=false \
-            aws_db_subnet_group.main "vpp-italia-${ENV}" || true
+          imp() {
+            terraform import -var-file=terraform.tfvars -input=false "$1" "$2" || true
+          }
 
-          terraform import -var-file=terraform.tfvars -input=false \
-            aws_db_parameter_group.timescaledb "vpp-timescaledb-${ENV}" || true
-
-          terraform import -var-file=terraform.tfvars -input=false \
-            aws_s3_bucket.logs "vpp-italia-logs-${ENV}" || true
-
-          terraform import -var-file=terraform.tfvars -input=false \
-            aws_s3_bucket.backups "vpp-italia-backups-${ENV}" || true
-
-          terraform import -var-file=terraform.tfvars -input=false \
-            aws_cloudwatch_log_group.api "/vpp/api/${ENV}" || true
+          imp aws_iam_role.ec2_api                         "vpp-ec2-api-${ENV}"
+          imp aws_key_pair.deploy                          "vpp-deploy-${ENV}"
+          imp aws_s3_bucket.logs                           "vpp-italia-logs-${ENV}-${ACCOUNT_ID}"
+          imp aws_s3_bucket.backups                        "vpp-italia-backups-${ENV}-${ACCOUNT_ID}"
+          imp aws_secretsmanager_secret.db_url             "vpp-italia/${ENV}/database-url"
+          imp aws_secretsmanager_secret.jwt_secret         "vpp-italia/${ENV}/jwt-secret-key"
+          imp aws_secretsmanager_secret.gme_password       "vpp-italia/${ENV}/gme-api-password"
+          imp aws_secretsmanager_secret.terna_client_secret "vpp-italia/${ENV}/terna-client-secret"
+          imp aws_db_subnet_group.main                     "vpp-italia-${ENV}"
+          imp aws_db_parameter_group.timescaledb           "vpp-timescaledb-${ENV}"
 
       # ------------------------------------------------------------------
       # Apply - uniquement si action == apply
