@@ -39,16 +39,21 @@ async def health_check() -> dict[str, Any]:
         from api.dependencies import _session_factory  # type: ignore[attr-defined]
 
         if _session_factory:
-            from data.models import Battery, BatteryState
             from sqlalchemy import func, select
+
+            from data.models import Battery, BatteryState
 
             async with _session_factory() as session:
                 total_res = await session.execute(select(func.count()).select_from(Battery))
                 batteries_total = total_res.scalar_one_or_none() or 0
 
                 online_res = await session.execute(
-                    select(func.count()).select_from(Battery).where(
-                        Battery.state.in_([BatteryState.ONLINE, BatteryState.CHARGING, BatteryState.DISCHARGING])
+                    select(func.count())
+                    .select_from(Battery)
+                    .where(
+                        Battery.state.in_(
+                            [BatteryState.ONLINE, BatteryState.CHARGING, BatteryState.DISCHARGING]
+                        )
                     )
                 )
                 batteries_online = online_res.scalar_one_or_none() or 0
@@ -83,9 +88,10 @@ async def battery_metrics() -> Response:
     lines: list[str] = []
 
     try:
-        from api.dependencies import _session_factory  # type: ignore[attr-defined]
-        from data.models import Battery, BatteryReading, BatteryState
         from sqlalchemy import select, text
+
+        from api.dependencies import _session_factory  # type: ignore[attr-defined]
+        from data.models import Battery, BatteryState
 
         if _session_factory is None:
             raise RuntimeError("DB not ready")
@@ -127,7 +133,12 @@ async def battery_metrics() -> Response:
             "# TYPE vpp_battery_voltage_volts gauge",
         ]
 
-        online_states = {BatteryState.ONLINE, BatteryState.CHARGING, BatteryState.DISCHARGING, BatteryState.IDLE}
+        online_states = {
+            BatteryState.ONLINE,
+            BatteryState.CHARGING,
+            BatteryState.DISCHARGING,
+            BatteryState.IDLE,
+        }
 
         for bat in batteries:
             bid = str(bat.battery_id)
@@ -139,13 +150,19 @@ async def battery_metrics() -> Response:
 
             if reading:
                 if reading.soc_percent is not None:
-                    lines.append(f"vpp_battery_soc_percent{{{labels}}} {float(reading.soc_percent):.2f}")
+                    lines.append(
+                        f"vpp_battery_soc_percent{{{labels}}} {float(reading.soc_percent):.2f}"
+                    )
                 if reading.power_kw is not None:
                     lines.append(f"vpp_battery_power_kw{{{labels}}} {float(reading.power_kw):.3f}")
                 if reading.temperature_c is not None:
-                    lines.append(f"vpp_battery_temperature_celsius{{{labels}}} {float(reading.temperature_c):.1f}")
+                    lines.append(
+                        f"vpp_battery_temperature_celsius{{{labels}}} {float(reading.temperature_c):.1f}"
+                    )
                 if reading.voltage_v is not None:
-                    lines.append(f"vpp_battery_voltage_volts{{{labels}}} {float(reading.voltage_v):.1f}")
+                    lines.append(
+                        f"vpp_battery_voltage_volts{{{labels}}} {float(reading.voltage_v):.1f}"
+                    )
 
     except Exception as exc:
         logger.warning("metrics.battery_scrape_failed", error=str(exc))
@@ -179,8 +196,9 @@ async def pnl_metrics() -> dict[str, Any]:
     projected_today_eur = 0.0
 
     try:
-        from api.dependencies import _session_factory  # type: ignore[attr-defined]
         from sqlalchemy import text
+
+        from api.dependencies import _session_factory  # type: ignore[attr-defined]
 
         if _session_factory:
             async with _session_factory() as session:

@@ -74,7 +74,11 @@ async def trigger_optimization(
     from core.optimizer import run_optimization_async
 
     task_id = await run_optimization_async(delivery_date=delivery_date)
-    return {"task_id": task_id, "status": "accepted", "delivery_date": str(delivery_date or "today+1")}
+    return {
+        "task_id": task_id,
+        "status": "accepted",
+        "delivery_date": str(delivery_date or "today+1"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +92,7 @@ async def get_prices_today(_user: CurrentUser) -> dict:
     import os
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     from core.market.gme_client import GMEPriceClient
 
     zone = os.getenv("GME_ZONE", "SUD")
@@ -114,6 +119,7 @@ async def get_prices_tomorrow(_user: CurrentUser) -> dict:
     import os
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
+
     from core.market.gme_client import GMEPriceClient
 
     zone = os.getenv("GME_ZONE", "SUD")
@@ -145,6 +151,7 @@ async def get_schedule_today(_user: CurrentUser) -> dict:
     """Return the optimizer's dispatch schedule for today."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
     from api.main import _scheduler
 
     today = datetime.now(ZoneInfo("Europe/Rome")).date()
@@ -175,8 +182,6 @@ async def force_schedule(
 
     Body: {"delivery_date": "YYYY-MM-DD"} — omit for today+1.
     """
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
     from api.main import _scheduler
 
     if _scheduler is None:
@@ -247,6 +252,7 @@ async def run_backtest(
     """
     import os
     import uuid as _uuid
+
     from core.dispatch.backtester import Backtester
     from core.dispatch.models import BatterySpec
     from core.market.gme_client import GMEPriceClient
@@ -279,11 +285,13 @@ async def run_backtest(
         try:
             report = await backtester.simulate(date_start, date_end, batteries)
             import structlog as _log
+
             _log.get_logger("backtest").info(
                 "backtest.completed", task_id=task_id, **report.to_summary()
             )
         except Exception as exc:
             import structlog as _log
+
             _log.get_logger("backtest").error("backtest.failed", task_id=task_id, error=str(exc))
 
     background_tasks.add_task(_run)

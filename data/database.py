@@ -1,7 +1,5 @@
 """Database utilities and TimescaleDB hypertable setup."""
 
-import os
-
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession

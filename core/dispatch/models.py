@@ -4,23 +4,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ActionType(str, Enum):
+class ActionType(StrEnum):
     CHARGE = "charge"
     DISCHARGE = "discharge"
     STOP = "stop"
 
 
-class HourType(str, Enum):
-    PEAK = "peak"         # prix > moyenne + threshold * std
-    OFF_PEAK = "off_peak" # prix < moyenne - threshold * std
+class HourType(StrEnum):
+    PEAK = "peak"  # prix > moyenne + threshold * std
+    OFF_PEAK = "off_peak"  # prix < moyenne - threshold * std
     NEUTRAL = "neutral"
 
 
-class ScheduleStatus(str, Enum):
+class ScheduleStatus(StrEnum):
     PLANNED = "planned"
     EXECUTING = "executing"
     COMPLETED = "completed"
@@ -32,10 +32,10 @@ class ScheduleStatus(str, Enum):
 class HourlyPrice:
     """Single hourly price entry from GME."""
 
-    hour: int                 # 0–23 (CET/CEST)
+    hour: int  # 0–23 (CET/CEST)
     price_eur_mwh: float
-    zone: str                 # NORD | CNORD | CSUD | SUD | SICI | SARD
-    market: str               # MGP | MI-A1 … MI-A7
+    zone: str  # NORD | CNORD | CSUD | SUD | SICI | SARD
+    market: str  # MGP | MI-A1 … MI-A7
     date: date | None = None
     hour_type: HourType = HourType.NEUTRAL
 
@@ -155,7 +155,7 @@ class BacktestReport:
     total_revenue_eur: float
     total_cost_eur: float
     total_pnl_eur: float
-    total_cycles: float             # Full equivalent cycles (DoD 80%)
+    total_cycles: float  # Full equivalent cycles (DoD 80%)
     avg_daily_pnl_eur: float
     best_day: date | None
     best_day_pnl_eur: float

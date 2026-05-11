@@ -11,7 +11,6 @@ import random
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 
 from connectors.huawei.exceptions import HuaweiAPIError, HuaweiAuthError, HuaweiTaskError
 from connectors.huawei.models import (
@@ -27,7 +26,7 @@ from connectors.huawei.models import (
 # Simulator constants
 # ---------------------------------------------------------------------------
 
-LATENCY_MS = 5          # Simulated API round-trip latency
+LATENCY_MS = 5  # Simulated API round-trip latency
 SOC_MIN = 10.0
 SOC_MAX = 90.0
 EFFICIENCY = 0.92
@@ -58,9 +57,9 @@ class _BatteryState:
     model: str
     capacity_kwh: float
     max_power_kw: float
-    soc: float = 50.0                         # percent
+    soc: float = 50.0  # percent
     temperature_c: float = TEMP_BASE
-    current_power_kw: float = 0.0             # + charge, - discharge
+    current_power_kw: float = 0.0  # + charge, - discharge
     dispatch_switch: DispatchSwitch = DispatchSwitch.STOP
     last_update: float = field(default_factory=time.monotonic)
 
@@ -133,11 +132,11 @@ class HuaweiSimulator:
 
     def __init__(self, plants: list[tuple[str, str]] | None = None) -> None:
         self._plants: dict[str, HuaweiPlant] = {}
-        self._batteries: dict[str, _BatteryState] = {}   # device_id → state
-        self._tasks: dict[str, _TaskRecord] = {}          # request_id → task
-        self._dispatch_mode: set[str] = set()             # plant codes with dispatch enabled
+        self._batteries: dict[str, _BatteryState] = {}  # device_id → state
+        self._tasks: dict[str, _TaskRecord] = {}  # request_id → task
+        self._dispatch_mode: set[str] = set()  # plant codes with dispatch enabled
 
-        for plant_code, model in (plants or []):
+        for plant_code, model in plants or []:
             self._add_plant(plant_code, model)
 
     # ------------------------------------------------------------------
@@ -226,8 +225,7 @@ class HuaweiSimulator:
     def _require_dispatch_mode(self, plant_code: str) -> None:
         if plant_code not in self._dispatch_mode:
             raise HuaweiAuthError(
-                f"Dispatch mode not enabled for plant {plant_code}. "
-                "Call set_dispatch_mode() first."
+                f"Dispatch mode not enabled for plant {plant_code}. Call set_dispatch_mode() first."
             )
 
     # ------------------------------------------------------------------

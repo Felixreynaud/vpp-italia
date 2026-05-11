@@ -1,19 +1,17 @@
 """SQLAlchemy ORM models — TimescaleDB compatible."""
 
 import uuid
-from datetime import datetime
-from enum import Enum as PyEnum
+from enum import StrEnum
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     Column,
     DateTime,
     Enum,
-    Float,
     ForeignKey,
     Integer,
-    JSON,
     Numeric,
     String,
     UniqueConstraint,
@@ -27,13 +25,13 @@ class Base(DeclarativeBase):
     pass
 
 
-class BatteryProtocol(str, PyEnum):
+class BatteryProtocol(StrEnum):
     MODBUS = "modbus"
     OCPP = "ocpp"
     REST = "rest"
 
 
-class BatteryState(str, PyEnum):
+class BatteryState(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"
     SAFE_STATE = "safe_state"
@@ -43,13 +41,13 @@ class BatteryState(str, PyEnum):
     FAULT = "fault"
 
 
-class DispatchSource(str, PyEnum):
+class DispatchSource(StrEnum):
     OPTIMIZER = "optimizer"
     MANUAL = "manual"
     MARKET_SIGNAL = "market_signal"
 
 
-class MarketName(str, PyEnum):
+class MarketName(StrEnum):
     MGP = "MGP"
     MI = "MI"
     MSD = "MSD"
@@ -57,7 +55,7 @@ class MarketName(str, PyEnum):
     MB = "MB"
 
 
-class OfferStatus(str, PyEnum):
+class OfferStatus(StrEnum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
     ACCEPTED = "accepted"
@@ -84,7 +82,9 @@ class Battery(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     metadata_ = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     readings = relationship("BatteryReading", back_populates="battery", lazy="dynamic")
     dispatch_plans = relationship("DispatchPlan", back_populates="battery", lazy="dynamic")
@@ -97,9 +97,13 @@ class BatteryReading(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     time = Column(DateTime(timezone=True), nullable=False, index=True)
-    battery_id = Column(UUID(as_uuid=True), ForeignKey("batteries.battery_id"), nullable=False, index=True)
+    battery_id = Column(
+        UUID(as_uuid=True), ForeignKey("batteries.battery_id"), nullable=False, index=True
+    )
     soc_percent = Column(Numeric(5, 2), nullable=True)
-    power_kw = Column(Numeric(10, 2), nullable=True, comment="Positive = discharge, negative = charge")
+    power_kw = Column(
+        Numeric(10, 2), nullable=True, comment="Positive = discharge, negative = charge"
+    )
     voltage_v = Column(Numeric(8, 2), nullable=True)
     current_a = Column(Numeric(8, 2), nullable=True)
     temperature_c = Column(Numeric(6, 2), nullable=True)
@@ -114,14 +118,20 @@ class DispatchPlan(Base):
 
     __tablename__ = "dispatch_plans"
     __table_args__ = (
-        UniqueConstraint("battery_id", "delivery_date", "quarter_hour", name="uq_dispatch_plan_slot"),
+        UniqueConstraint(
+            "battery_id", "delivery_date", "quarter_hour", name="uq_dispatch_plan_slot"
+        ),
     )
 
     plan_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    battery_id = Column(UUID(as_uuid=True), ForeignKey("batteries.battery_id"), nullable=False, index=True)
+    battery_id = Column(
+        UUID(as_uuid=True), ForeignKey("batteries.battery_id"), nullable=False, index=True
+    )
     delivery_date = Column(String(10), nullable=False, comment="YYYY-MM-DD in Europe/Rome")
     quarter_hour = Column(Integer, nullable=False, comment="0-95, representing QH of the day")
-    power_kw = Column(Numeric(10, 2), nullable=False, comment="Target power setpoint (+ discharge, - charge)")
+    power_kw = Column(
+        Numeric(10, 2), nullable=False, comment="Target power setpoint (+ discharge, - charge)"
+    )
     source = Column(Enum(DispatchSource), nullable=False, default=DispatchSource.OPTIMIZER)
     optimization_run_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -143,9 +153,13 @@ class MarketOffer(Base):
     capacity_mw = Column(Numeric(10, 3), nullable=True)
     price_eur_mwh = Column(Numeric(10, 2), nullable=False)
     direction = Column(String(10), nullable=False, comment="UP | DOWN | BOTH")
-    external_id = Column(String(128), nullable=True, comment="ID returned by GME/Terna after submission")
+    external_id = Column(
+        String(128), nullable=True, comment="ID returned by GME/Terna after submission"
+    )
     status = Column(Enum(OfferStatus), nullable=False, default=OfferStatus.DRAFT)
     response_payload = Column(JSON, nullable=True)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

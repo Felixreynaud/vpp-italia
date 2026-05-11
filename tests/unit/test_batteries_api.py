@@ -1,10 +1,8 @@
 """Unit tests for /api/v1/batteries endpoints."""
 
 import uuid
-from decimal import Decimal
 
 import pytest
-import pytest_asyncio
 
 
 @pytest.mark.asyncio
@@ -30,7 +28,9 @@ async def test_create_battery(client):
         "min_soc_percent": "10.0",
         "max_soc_percent": "90.0",
     }
-    resp = await client.post("/api/v1/batteries", json=payload, headers={"Authorization": "Bearer test"})
+    resp = await client.post(
+        "/api/v1/batteries", json=payload, headers={"Authorization": "Bearer test"}
+    )
     assert resp.status_code == 201
     body = resp.json()
     assert body["asset_id"] == "IT_BESS_TEST_001"

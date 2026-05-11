@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -17,13 +16,13 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 # Modbus register map (manufacturer-specific — adjust per hardware)
-REG_POWER_SETPOINT = 0x1000   # Holding register: target power in 0.1 kW units
-REG_SOC = 0x1001              # Input register: SoC in 0.1% units
-REG_POWER_ACTUAL = 0x1002     # Input register: actual power in 0.1 kW units
-REG_VOLTAGE = 0x1003          # Input register: DC voltage in 0.1 V units
-REG_CURRENT = 0x1004          # Input register: DC current in 0.1 A units
-REG_TEMPERATURE = 0x1005      # Input register: cell temperature in 0.1 °C units
-REG_STATUS = 0x1006           # Input register: battery status bitmask
+REG_POWER_SETPOINT = 0x1000  # Holding register: target power in 0.1 kW units
+REG_SOC = 0x1001  # Input register: SoC in 0.1% units
+REG_POWER_ACTUAL = 0x1002  # Input register: actual power in 0.1 kW units
+REG_VOLTAGE = 0x1003  # Input register: DC voltage in 0.1 V units
+REG_CURRENT = 0x1004  # Input register: DC current in 0.1 A units
+REG_TEMPERATURE = 0x1005  # Input register: cell temperature in 0.1 °C units
+REG_STATUS = 0x1006  # Input register: battery status bitmask
 
 
 @dataclass
@@ -38,7 +37,7 @@ class ModbusReading:
     raw: dict
 
 
-async def read_battery(battery: "Battery", timeout: float = 5.0) -> ModbusReading:
+async def read_battery(battery: Battery, timeout: float = 5.0) -> ModbusReading:
     """Poll a battery over Modbus TCP and return a structured reading."""
     client = AsyncModbusTcpClient(str(battery.host), port=battery.port, timeout=timeout)
     raw: dict = {}
@@ -68,7 +67,7 @@ async def read_battery(battery: "Battery", timeout: float = 5.0) -> ModbusReadin
         client.close()
 
 
-async def send_power_setpoint(battery: "Battery", power_kw: float, timeout: float = 5.0) -> str:
+async def send_power_setpoint(battery: Battery, power_kw: float, timeout: float = 5.0) -> str:
     """Write a power setpoint to a battery. Returns a command_id for tracking."""
     command_id = str(uuid.uuid4())
     client = AsyncModbusTcpClient(str(battery.host), port=battery.port, timeout=timeout)

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
-
 from core.dispatch.models import BatterySpec
 from core.optimization.arbitrage import ArbitrageInput, ArbitrageOptimizer
 from core.optimization.peak_shaving import PeakShavingInput, PeakShavingOptimizer
@@ -95,8 +93,30 @@ def test_peak_shaving_economie_positive_when_surplus() -> None:
 
 def test_arbitrage_revenu_positif() -> None:
     prix_mgp_1mars_2025 = [
-        45, 40, 38, 36, 35, 38, 55, 75, 90, 88, 82, 78,
-        70, 65, 68, 72, 85, 95, 100, 92, 80, 70, 60, 50,
+        45,
+        40,
+        38,
+        36,
+        35,
+        38,
+        55,
+        75,
+        90,
+        88,
+        82,
+        78,
+        70,
+        65,
+        68,
+        72,
+        85,
+        95,
+        100,
+        92,
+        80,
+        70,
+        60,
+        50,
     ]
     battery = _make_battery(capacity_kwh=500.0, max_power_kw=108.0, soc_pct=50.0)
     inp = ArbitrageInput(prix_mgp=prix_mgp_1mars_2025, batteries=[battery])
@@ -181,7 +201,9 @@ def test_stochastique_seed_reproducibility() -> None:
     battery = _make_battery()
 
     def run(seed: int) -> list[float]:
-        inp = StochasticInput(prix_mgp_base=prix_base, batteries=[battery], n_scenarios=10, random_seed=seed)
+        inp = StochasticInput(
+            prix_mgp_base=prix_base, batteries=[battery], n_scenarios=10, random_seed=seed
+        )
         return StochasticOptimizer().optimize(inp).scenarios_revenus
 
     assert run(7) == run(7)
@@ -189,18 +211,21 @@ def test_stochastique_seed_reproducibility() -> None:
 
 def test_scenarios_liste() -> None:
     from core.optimization.scenarios import SCENARIOS, ScenarioType
+
     assert len(SCENARIOS) == 7
     assert ScenarioType.PEAK_SHAVING in SCENARIOS
 
 
 def test_all_scenario_types_present() -> None:
     from core.optimization.scenarios import SCENARIOS, ScenarioType
+
     for st in ScenarioType:
         assert st in SCENARIOS, f"Missing scenario definition for {st}"
 
 
 def test_get_scenario_returns_correct_type() -> None:
     from core.optimization.scenarios import ScenarioType, get_scenario
+
     sc = get_scenario(ScenarioType.ARBITRAGE_MGP)
     assert sc.type == ScenarioType.ARBITRAGE_MGP
     assert sc.optimizer_class == "ArbitrageOptimizer"
@@ -209,6 +234,7 @@ def test_get_scenario_returns_correct_type() -> None:
 
 def test_scenario_available_flags() -> None:
     from core.optimization.scenarios import ScenarioType, get_scenario
+
     assert get_scenario(ScenarioType.PEAK_SHAVING).available is True
     assert get_scenario(ScenarioType.ARBITRAGE_MGP).available is True
     assert get_scenario(ScenarioType.FREQUENCY_RESPONSE).future is True

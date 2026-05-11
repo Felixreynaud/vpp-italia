@@ -46,7 +46,7 @@ class HuaweiAPIError(HuaweiError):
         self.http_status = http_status
 
     @classmethod
-    def from_fail_code(cls, fail_code: int, detail: str = "") -> "HuaweiAPIError":
+    def from_fail_code(cls, fail_code: int, detail: str = "") -> HuaweiAPIError:
         description = cls.FAIL_CODES.get(fail_code, f"Unknown Huawei error {fail_code}")
         message = f"[{fail_code}] {description}"
         if detail:
@@ -70,7 +70,9 @@ class HuaweiTaskError(HuaweiError):
         task_status: Raw status code returned (2 = timeout).
     """
 
-    def __init__(self, message: str, request_id: str | None = None, task_status: int | None = None) -> None:
+    def __init__(
+        self, message: str, request_id: str | None = None, task_status: int | None = None
+    ) -> None:
         super().__init__(message)
         self.request_id = request_id
         self.task_status = task_status

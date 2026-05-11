@@ -118,4 +118,6 @@ async def send_dispatch_command(
     from connectors.modbus import send_power_setpoint  # lazy import to avoid circular deps
 
     command_id = await send_power_setpoint(battery, command.power_kw)
-    return DispatchCommandResponse(command_id=command_id, battery_id=battery_id, power_kw=command.power_kw)
+    return DispatchCommandResponse(
+        command_id=command_id, battery_id=battery_id, power_kw=command.power_kw
+    )

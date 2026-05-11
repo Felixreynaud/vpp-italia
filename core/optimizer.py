@@ -7,10 +7,9 @@ battery physical constraints (SoC, ramp rates, power limits).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
-from decimal import Decimal
-from typing import Sequence
+from datetime import date
 
 import pulp
 import structlog
@@ -68,7 +67,7 @@ def optimize_battery(
     p_max = battery.max_power_kw
     soc_min = battery.min_soc_percent / 100.0
     soc_max = battery.max_soc_percent / 100.0
-    eta = battery.efficiency_roundtrip ** 0.5  # one-way efficiency
+    eta = battery.efficiency_roundtrip**0.5  # one-way efficiency
 
     # Decision variables
     p_dis = [pulp.LpVariable(f"p_dis_{t}", lowBound=0, upBound=p_max) for t in range(N_QH)]

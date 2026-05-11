@@ -17,7 +17,6 @@ import math
 import os
 import statistics
 import uuid
-from dataclasses import replace
 from datetime import date
 
 import structlog
@@ -211,9 +210,7 @@ class DispatchOptimizer:
                 desired = ActionType.STOP
 
             # Compute achievable power and new SoC
-            power_kw, soc_after = self._compute_action(
-                desired, battery, soc, soc_min, soc_max, eta
-            )
+            power_kw, soc_after = self._compute_action(desired, battery, soc, soc_min, soc_max, eta)
 
             action = DispatchAction(
                 battery_id=battery.battery_id,

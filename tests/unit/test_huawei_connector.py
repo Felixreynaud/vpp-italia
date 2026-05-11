@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
-
 import pytest
 
-from connectors.huawei.exceptions import HuaweiAPIError, HuaweiAuthError, HuaweiTaskError
+from connectors.huawei.exceptions import HuaweiAPIError, HuaweiTaskError
 from connectors.huawei.models import DispatchSwitch, TaskStatus
 from connectors.huawei.simulator import HuaweiSimulator
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -20,11 +16,13 @@ from connectors.huawei.simulator import HuaweiSimulator
 @pytest.fixture
 def sim() -> HuaweiSimulator:
     """Simulator with three LUNA2000 plants, one per model."""
-    return HuaweiSimulator(plants=[
-        ("PLANT_107", "LUNA2000-107kWh"),
-        ("PLANT_161", "LUNA2000-161kWh"),
-        ("PLANT_215", "LUNA2000-215kWh"),
-    ])
+    return HuaweiSimulator(
+        plants=[
+            ("PLANT_107", "LUNA2000-107kWh"),
+            ("PLANT_161", "LUNA2000-161kWh"),
+            ("PLANT_215", "LUNA2000-215kWh"),
+        ]
+    )
 
 
 @pytest.fixture
@@ -344,8 +342,9 @@ def test_battery_status_discharging_flag() -> None:
 
 
 def test_battery_status_soc_validation() -> None:
-    from connectors.huawei.models import HuaweiBatteryStatus
     from pydantic import ValidationError
+
+    from connectors.huawei.models import HuaweiBatteryStatus
 
     with pytest.raises(ValidationError):
         HuaweiBatteryStatus(device_id="D1", soc=110.0, power_kw=0.0)

@@ -1,14 +1,13 @@
 """Market submission endpoints (GME, Terna)."""
 
 from datetime import date
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
-from typing import Annotated
-from fastapi import Query
+from fastapi import APIRouter, HTTPException, Query, status
 
 from api.dependencies import CurrentUser, DbSession
-from data.schemas import MarketOfferCreate, MarketOfferResponse, MarketOfferListResponse
+from data.schemas import MarketOfferCreate, MarketOfferListResponse, MarketOfferResponse
 
 router = APIRouter(prefix="/markets")
 
@@ -21,8 +20,9 @@ async def list_offers(
     delivery_date: Annotated[date | None, Query()] = None,
 ) -> MarketOfferListResponse:
     """List market offers submitted to GME/Terna."""
-    from data.models import MarketOffer
     from sqlalchemy import select
+
+    from data.models import MarketOffer
 
     query = select(MarketOffer).order_by(MarketOffer.submitted_at.desc()).limit(200)
     if market:
@@ -89,9 +89,9 @@ async def cancel_offer(
     _user: CurrentUser,
 ) -> MarketOfferResponse:
     """Cancel a previously submitted offer (if the market window allows it)."""
-    from data.models import MarketOffer
     from connectors.gme import GMEClient
     from connectors.terna import TernaClient
+    from data.models import MarketOffer
 
     offer = await db.get(MarketOffer, offer_id)
     if not offer:
@@ -103,10 +103,7 @@ async def cancel_offer(
             detail=f"Cannot cancel offer in status: {offer.status}",
         )
 
-    if offer.market in ("MGP", "MI", "MSD_GME"):
-        client = GMEClient()
-    else:
-        client = TernaClient()
+    client = GMEClient() if offer.market in ("MGP", "MI", "MSD_GME") else TernaClient()
 
     await client.cancel_offer(offer.external_id)
     offer.status = "cancelled"

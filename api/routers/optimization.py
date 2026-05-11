@@ -10,11 +10,11 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import CurrentUser, DbSession, get_current_user, get_db
+from api.dependencies import CurrentUser, DbSession
 from core.dispatch.models import BatterySpec
 from core.optimization.arbitrage import ArbitrageInput, ArbitrageOptimizer
 from core.optimization.peak_shaving import PeakShavingInput, PeakShavingOptimizer
