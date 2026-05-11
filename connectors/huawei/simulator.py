@@ -32,6 +32,7 @@ SOC_MAX = 90.0
 EFFICIENCY = 0.92
 TEMP_BASE = 25.0
 TEMP_NOISE = 0.3
+REALTIME_RATE_LIMIT_S = 300.0  # 5-minute minimum between real-time calls per plant (Huawei NBI limit)
 
 # LUNA2000 model catalogue: name → (capacity_kwh, max_power_kw)
 LUNA2000_MODELS: dict[str, tuple[float, float]] = {
@@ -137,6 +138,8 @@ class HuaweiSimulator:
         self._batteries: dict[str, _BatteryState] = {}  # device_id → state
         self._tasks: dict[str, _TaskRecord] = {}  # request_id → task
         self._dispatch_mode: set[str] = set()  # plant codes with dispatch enabled
+        self._pending_tasks: dict[str, str] = {}  # plant_code → active request_id
+        self._last_realtime: dict[str, float] = {}  # plant_code → monotonic timestamp
 
         for plant_code, model in plants or []:
             self._add_plant(plant_code, model)
@@ -354,11 +357,181 @@ class HuaweiSimulator:
         """Direct access to internal battery state for test assertions."""
         return self._batteries.get(device_id)
 
-    def set_soc(self, device_id: str, soc: float) -> None:
-        """Directly set SoC for deterministic test setup."""
-        bat = self._batteries.get(device_id)
+    def set_soc(self, plant_or_device_id: str, soc: float) -> None:
+        """Directly set SoC for deterministic test setup. Accepts plant_code or device_id."""
+        bat = self._batteries.get(plant_or_device_id)
+        if bat is None:
+            # Try looking up by plant_code (device_id is "DEV_{plant_code}")
+            bat = self._batteries.get(f"DEV_{plant_or_device_id}")
         if bat:
             bat.soc = max(SOC_MIN, min(SOC_MAX, soc))
+
+    # ------------------------------------------------------------------
+    # High-level dispatch API (mirrors HuaweiClient public interface)
+    # ------------------------------------------------------------------
+
+    async def charge(self, plant_code: str, power_w: float) -> HuaweiDispatchTask:
+        """Send a charge command. power_w must be > 0 (Watts)."""
+        await asyncio.sleep(LATENCY_MS / 1000)
+        if power_w <= 0:
+            raise ValueError("power_w > 0 required for charge command")
+        if plant_code not in self._dispatch_mode:
+            raise HuaweiAPIError(
+                f"thirdPartyDispatch not enabled for plant {plant_code}",
+                fail_code=401,
+            )
+        if plant_code in self._pending_tasks:
+            raise HuaweiTaskError(
+                f"Plant {plant_code} already has a pending task {self._pending_tasks[plant_code]}"
+            )
+
+        batteries = [b for b in self._batteries.values() if b.plant_code == plant_code]
+        if not batteries:
+            raise HuaweiAPIError(f"No batteries for plant {plant_code}", fail_code=404)
+
+        power_kw = power_w / 1000.0
+        per_battery_kw = power_kw / len(batteries)
+        for bat in batteries:
+            clamped = min(per_battery_kw, bat.max_power_kw)
+            bat.current_power_kw = clamped
+            bat.dispatch_switch = DispatchSwitch.CHARGE
+
+        request_id = f"TASK_{uuid.uuid4().hex[:12]}"
+        record = _TaskRecord(
+            request_id=request_id,
+            plant_code=plant_code,
+            dispatch_switch=DispatchSwitch.CHARGE,
+            power_kw=per_battery_kw,
+            duration_min=60,
+            target_soc=None,
+        )
+        self._tasks[request_id] = record
+        self._pending_tasks[plant_code] = request_id
+
+        return HuaweiDispatchTask(
+            request_id=request_id,
+            plant_code=plant_code,
+            dispatch_switch=DispatchSwitch.CHARGE,
+            power_w=power_w,
+            status=TaskStatus.IN_PROGRESS,
+        )
+
+    async def discharge(
+        self, plant_code: str, power_w: float, target_soc: float | None = None
+    ) -> HuaweiDispatchTask:
+        """Send a discharge command. power_w must be > 0 (Watts)."""
+        await asyncio.sleep(LATENCY_MS / 1000)
+        if power_w <= 0:
+            raise ValueError("power_w > 0 required for discharge command")
+        if plant_code not in self._dispatch_mode:
+            raise HuaweiAPIError(
+                f"thirdPartyDispatch not enabled for plant {plant_code}",
+                fail_code=401,
+            )
+        if plant_code in self._pending_tasks:
+            raise HuaweiTaskError(
+                f"Plant {plant_code} already has a pending task {self._pending_tasks[plant_code]}"
+            )
+
+        batteries = [b for b in self._batteries.values() if b.plant_code == plant_code]
+        if not batteries:
+            raise HuaweiAPIError(f"No batteries for plant {plant_code}", fail_code=404)
+
+        power_kw = power_w / 1000.0
+        per_battery_kw = power_kw / len(batteries)
+        for bat in batteries:
+            clamped = min(per_battery_kw, bat.max_power_kw)
+            bat.current_power_kw = -clamped
+            bat.dispatch_switch = DispatchSwitch.DISCHARGE
+
+        request_id = f"TASK_{uuid.uuid4().hex[:12]}"
+        record = _TaskRecord(
+            request_id=request_id,
+            plant_code=plant_code,
+            dispatch_switch=DispatchSwitch.DISCHARGE,
+            power_kw=per_battery_kw,
+            duration_min=60,
+            target_soc=target_soc,
+        )
+        self._tasks[request_id] = record
+        self._pending_tasks[plant_code] = request_id
+
+        return HuaweiDispatchTask(
+            request_id=request_id,
+            plant_code=plant_code,
+            dispatch_switch=DispatchSwitch.DISCHARGE,
+            power_w=power_w,
+            target_soc=target_soc,
+            status=TaskStatus.IN_PROGRESS,
+        )
+
+    async def stop(self, plant_code: str) -> HuaweiDispatchTask:
+        """Emergency stop — halts all dispatch immediately, no dispatch mode required."""
+        await asyncio.sleep(LATENCY_MS / 1000)
+        for bat in self._batteries.values():
+            if bat.plant_code == plant_code:
+                bat.current_power_kw = 0.0
+                bat.dispatch_switch = DispatchSwitch.STOP
+
+        self._pending_tasks.pop(plant_code, None)
+
+        request_id = f"STOP_{uuid.uuid4().hex[:12]}"
+        record = _TaskRecord(
+            request_id=request_id,
+            plant_code=plant_code,
+            dispatch_switch=DispatchSwitch.STOP,
+            power_kw=0.0,
+            duration_min=0,
+            target_soc=None,
+            status=TaskStatus.COMPLETE,
+        )
+        self._tasks[request_id] = record
+
+        return HuaweiDispatchTask(
+            request_id=request_id,
+            plant_code=plant_code,
+            dispatch_switch=DispatchSwitch.STOP,
+            status=TaskStatus.COMPLETE,
+        )
+
+    async def get_battery_realtime(
+        self, device_ids: list[str], *, plant_code: str
+    ) -> list[HuaweiBatteryStatus]:
+        """Return real-time KPIs. Enforces a per-plant rate limit (Huawei NBI: 5 min)."""
+        await asyncio.sleep(LATENCY_MS / 1000)
+        now = time.monotonic()
+        last = self._last_realtime.get(plant_code)
+        if last is not None and (now - last) < REALTIME_RATE_LIMIT_S:
+            raise HuaweiAPIError(
+                f"Real-time KPI rate limit exceeded for plant {plant_code} (5-min interval)",
+                fail_code=407,
+            )
+        self._last_realtime[plant_code] = now
+
+        return [
+            self._batteries[did].to_status()
+            for did in device_ids
+            if did in self._batteries
+        ]
+
+    async def wait_for_task(self, request_id: str, plant_code: str) -> HuaweiDispatchTask:
+        """Wait for a dispatch task to complete. Immediately resolves in the simulator."""
+        await asyncio.sleep(LATENCY_MS / 1000)
+        record = self._tasks.get(request_id)
+        if record is None:
+            raise HuaweiTaskError(f"Task {request_id} not found")
+        record.status = TaskStatus.COMPLETE
+        self._pending_tasks.pop(plant_code, None)
+
+        return HuaweiDispatchTask(
+            request_id=record.request_id,
+            plant_code=record.plant_code,
+            dispatch_switch=record.dispatch_switch,
+            power_w=record.power_kw * 1000,
+            duration_min=record.duration_min,
+            target_soc=record.target_soc,
+            status=TaskStatus.COMPLETE,
+        )
 
     def inject_fault(self, device_id: str) -> None:
         """Simulate a battery fault for error-handling tests."""
