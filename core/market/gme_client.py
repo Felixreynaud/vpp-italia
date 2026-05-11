@@ -75,6 +75,7 @@ class GMEPriceClient:
         # Lazy-import the library so the rest of the codebase loads without it
         try:
             import mercati_energetici as _me  # noqa: F401
+
             self._lib_available = True
         except ImportError:
             logger.warning("gme.library_not_installed", hint="pip install mercati-energetici")
@@ -124,7 +125,9 @@ class GMEPriceClient:
             logger.warning("gme.pun_error", date=str(target), error=str(exc))
         return 0.0
 
-    async def get_mi_prices(self, session: str = "MI-A1", target_date: date | None = None) -> dict[int, float]:
+    async def get_mi_prices(
+        self, session: str = "MI-A1", target_date: date | None = None
+    ) -> dict[int, float]:
         """Return intraday prices for a given MI session.
 
         session: MI-A1 … MI-A7
@@ -138,7 +141,9 @@ class GMEPriceClient:
         try:
             prices = await self._fetch_mi(target, session)
         except Exception as exc:
-            logger.warning("gme.mi_api_unavailable", session=session, date=str(target), error=str(exc))
+            logger.warning(
+                "gme.mi_api_unavailable", session=session, date=str(target), error=str(exc)
+            )
             # Fall back to MGP for this hour range
             mgp = await self.get_mgp_prices(target)
             return mgp
@@ -235,9 +240,17 @@ class GMEPriceClient:
         yesterday = target - timedelta(days=1)
         cache_key = f"{market.lower()}:{yesterday}:{self._zone}"
         if cache_key in self._cache:
-            logger.warning("gme.using_fallback_prices", target=str(target), fallback=str(yesterday))
+            logger.warning(
+                "gme.using_fallback_prices", target=str(target), fallback=str(yesterday)
+            )
             return [
-                HourlyPrice(hour=p.hour, price_eur_mwh=p.price_eur_mwh, zone=p.zone, market=p.market, date=target)
+                HourlyPrice(
+                    hour=p.hour,
+                    price_eur_mwh=p.price_eur_mwh,
+                    zone=p.zone,
+                    market=p.market,
+                    date=target,
+                )
                 for p in self._cache[cache_key]
             ]
         # No fallback available — return flat estimate
@@ -258,14 +271,19 @@ class GMEPriceClient:
             from sqlalchemy import text
 
             result = await self._db.execute(
-                text("SELECT hour, price_eur_mwh, zone, market FROM gme_price_cache WHERE cache_key = :k"),
+                text(
+                    "SELECT hour, price_eur_mwh, zone, market FROM gme_price_cache"
+                    " WHERE cache_key = :k"
+                ),
                 {"k": cache_key},
             )
             rows = result.fetchall()
             if not rows:
                 return None
             return [
-                HourlyPrice(hour=r.hour, price_eur_mwh=r.price_eur_mwh, zone=r.zone, market=r.market)
+                HourlyPrice(
+                    hour=r.hour, price_eur_mwh=r.price_eur_mwh, zone=r.zone, market=r.market
+                )
                 for r in rows
             ]
         except Exception:
@@ -282,9 +300,16 @@ class GMEPriceClient:
                     text("""
                         INSERT INTO gme_price_cache (cache_key, hour, price_eur_mwh, zone, market)
                         VALUES (:k, :h, :p, :z, :m)
-                        ON CONFLICT (cache_key, hour) DO UPDATE SET price_eur_mwh = EXCLUDED.price_eur_mwh
+                        ON CONFLICT (cache_key, hour) DO UPDATE
+                        SET price_eur_mwh = EXCLUDED.price_eur_mwh
                     """),
-                    {"k": cache_key, "h": p.hour, "p": p.price_eur_mwh, "z": p.zone, "m": p.market},
+                    {
+                        "k": cache_key,
+                        "h": p.hour,
+                        "p": p.price_eur_mwh,
+                        "z": p.zone,
+                        "m": p.market,
+                    },
                 )
             await self._db.commit()
         except Exception as exc:

@@ -6,9 +6,9 @@ Moved from core/dispatch.py into the core.dispatch package.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Callable
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -55,7 +55,7 @@ class DispatchExecutor:
             connector = self._connector_factory(command.battery_id)
             async with asyncio.timeout(timeout):
                 await connector.set_power_kw(command.power_kw)
-            self._last_contact[command.battery_id] = datetime.now(timezone.utc)
+            self._last_contact[command.battery_id] = datetime.now(UTC)
             latency = (time.perf_counter() - t0) * 1000
             logger.info(
                 "dispatch.command_sent",
@@ -63,19 +63,23 @@ class DispatchExecutor:
                 power_kw=command.power_kw,
                 latency_ms=round(latency, 1),
             )
-            return CommandResult(battery_id=command.battery_id, success=True, latency_ms=round(latency, 1))
+            return CommandResult(
+                battery_id=command.battery_id, success=True, latency_ms=round(latency, 1)
+            )
         except TimeoutError:
             logger.error("dispatch.command_timeout", battery_id=str(command.battery_id))
             return CommandResult(battery_id=command.battery_id, success=False, error="timeout")
         except Exception as e:
-            logger.error("dispatch.command_error", battery_id=str(command.battery_id), error=str(e))
+            logger.error(
+                "dispatch.command_error", battery_id=str(command.battery_id), error=str(e)
+            )
             return CommandResult(battery_id=command.battery_id, success=False, error=str(e))
 
     def is_stale(self, battery_id: UUID) -> bool:
         last = self._last_contact.get(battery_id)
         if last is None:
             return True
-        return (datetime.now(timezone.utc) - last).total_seconds() > SAFE_STATE_TIMEOUT_SECONDS
+        return (datetime.now(UTC) - last).total_seconds() > SAFE_STATE_TIMEOUT_SECONDS
 
     async def send_safe_state(self, battery_id: UUID) -> None:
         safe_cmd = BatteryCommand(battery_id=battery_id, power_kw=0.0, quarter_hour=-1)
@@ -83,4 +87,6 @@ class DispatchExecutor:
         if result.success:
             logger.warning("dispatch.safe_state_applied", battery_id=str(battery_id))
         else:
-            logger.critical("dispatch.safe_state_failed", battery_id=str(battery_id), error=result.error)
+            logger.critical(
+                "dispatch.safe_state_failed", battery_id=str(battery_id), error=result.error
+            )

@@ -30,8 +30,8 @@ from core.market.gme_client import GMEPriceClient
 logger = structlog.get_logger(__name__)
 
 TZ_ROME = ZoneInfo("Europe/Rome")
-PRICE_FETCH_TIME = time(13, 30)   # 13:30 CET — 30 min after GME publication
-SOC_DEVIATION_THRESHOLD = 5.0    # Percent — triggers re-plan if exceeded
+PRICE_FETCH_TIME = time(13, 30)  # 13:30 CET — 30 min after GME publication
+SOC_DEVIATION_THRESHOLD = 5.0  # Percent — triggers re-plan if exceeded
 
 
 class DispatchScheduler:
@@ -48,7 +48,7 @@ class DispatchScheduler:
         self,
         batteries: list[BatterySpec],
         gme_client: GMEPriceClient,
-        huawei_client: Any,   # HuaweiBatteryClient | HuaweiSimulator
+        huawei_client: Any,  # HuaweiBatteryClient | HuaweiSimulator
         optimizer: DispatchOptimizer | None = None,
         zone: str | None = None,
     ) -> None:
@@ -140,13 +140,17 @@ class DispatchScheduler:
             schedule = self._schedules.get(today)
 
             if not schedule:
-                logger.warning("dispatch_scheduler.no_schedule", date=str(today), hour=current_hour)
+                logger.warning(
+                    "dispatch_scheduler.no_schedule", date=str(today), hour=current_hour
+                )
                 continue
 
             try:
                 await self._execute_hour(schedule, current_hour)
             except Exception:
-                logger.exception("dispatch_scheduler.hourly_dispatch_error", hour=current_hour)
+                logger.exception(
+                    "dispatch_scheduler.hourly_dispatch_error", hour=current_hour
+                )
 
     async def _execute_hour(self, schedule: DailySchedule, hour: int) -> None:
         hourly = schedule.hours.get(hour)
@@ -164,7 +168,9 @@ class DispatchScheduler:
                 if action.action_type == ActionType.CHARGE:
                     task = await self._huawei.charge(battery_id, power_w=action.power_kw * 1000)
                 elif action.action_type == ActionType.DISCHARGE:
-                    task = await self._huawei.discharge(battery_id, power_w=abs(action.power_kw) * 1000)
+                    task = await self._huawei.discharge(
+                        battery_id, power_w=abs(action.power_kw) * 1000
+                    )
                 else:
                     task = await self._huawei.stop(battery_id)
 
@@ -293,7 +299,9 @@ class DispatchScheduler:
         # Patch remaining hours in the live schedule
         for h in range(from_hour, 24):
             if h in new_sched.hours and battery.battery_id in new_sched.hours[h].actions:
-                schedule.hours[h].actions[battery.battery_id] = new_sched.hours[h].actions[battery.battery_id]
+                schedule.hours[h].actions[battery.battery_id] = new_sched.hours[h].actions[
+                    battery.battery_id
+                ]
 
         logger.info(
             "dispatch_scheduler.replanned",
