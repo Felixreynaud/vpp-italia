@@ -69,17 +69,16 @@ PRICES_HIGH_SPREAD: dict[int, float] = {
 
 @pytest.mark.asyncio
 async def test_gme_client_returns_24_hours() -> None:
+    from core.dispatch.models import HourlyPrice
+
     client = GMEPriceClient(zone="SUD")
-    with patch.object(client, "_fetch_mgp", new=AsyncMock(return_value=[])):
-        with patch.object(
-            client, "_fallback_prices",
-            new=AsyncMock(return_value=[
-                __import__("core.dispatch.models", fromlist=["HourlyPrice"]).HourlyPrice(
-                    hour=h, price_eur_mwh=80.0, zone="SUD", market="MGP", date=date(2025, 1, 1)
-                )
-                for h in range(24)
-            ])
-        ):
+    fake_fallback = [
+        HourlyPrice(hour=h, price_eur_mwh=80.0, zone="SUD", market="MGP", date=date(2025, 1, 1))
+        for h in range(24)
+    ]
+    # Raise so the except-branch triggers _fallback_prices
+    with patch.object(client, "_fetch_mgp", new=AsyncMock(side_effect=RuntimeError("mocked API failure"))):
+        with patch.object(client, "_fallback_prices", new=AsyncMock(return_value=fake_fallback)):
             prices = await client.get_mgp_prices(date(2025, 1, 1))
 
     assert len(prices) == 24
@@ -270,8 +269,8 @@ def test_optimize_day_charge_at_offpeak() -> None:
 def test_optimize_day_multiple_batteries_independent() -> None:
     """Each battery should be scheduled independently."""
     opt = DispatchOptimizer()
-    bat1 = make_battery("BAT_001", initial_soc=80.0)  # starts full → mainly discharge
-    bat2 = make_battery("BAT_002", initial_soc=20.0)  # starts empty → mainly charge
+    bat1 = make_battery("BAT_001", initial_soc=80.0)  # starts full -> mainly discharge
+    bat2 = make_battery("BAT_002", initial_soc=20.0)  # starts empty -> mainly charge
 
     schedule = opt.optimize_day(PRICES_2025_01_01, [bat1, bat2])
 

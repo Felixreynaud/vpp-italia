@@ -13,11 +13,12 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.sql import func
 
@@ -81,7 +82,7 @@ class Battery(Base):
     ramp_rate_kw_per_min = Column(Numeric(8, 2), nullable=True)
     state = Column(Enum(BatteryState), nullable=False, default=BatteryState.OFFLINE)
     is_active = Column(Boolean, nullable=False, default=True)
-    metadata_ = Column("metadata", JSONB, nullable=True)
+    metadata_ = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -103,7 +104,7 @@ class BatteryReading(Base):
     current_a = Column(Numeric(8, 2), nullable=True)
     temperature_c = Column(Numeric(6, 2), nullable=True)
     state = Column(Enum(BatteryState), nullable=True)
-    raw = Column(JSONB, nullable=True, comment="Full raw payload from connector")
+    raw = Column(JSON, nullable=True, comment="Full raw payload from connector")
 
     battery = relationship("Battery", back_populates="readings")
 
@@ -144,7 +145,7 @@ class MarketOffer(Base):
     direction = Column(String(10), nullable=False, comment="UP | DOWN | BOTH")
     external_id = Column(String(128), nullable=True, comment="ID returned by GME/Terna after submission")
     status = Column(Enum(OfferStatus), nullable=False, default=OfferStatus.DRAFT)
-    response_payload = Column(JSONB, nullable=True)
+    response_payload = Column(JSON, nullable=True)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

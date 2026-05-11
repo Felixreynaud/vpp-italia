@@ -78,9 +78,11 @@ def optimize_battery(
     # Initial SoC
     prob += soc[0] == battery.initial_soc_percent / 100.0
 
-    # SoC dynamics
+    # SoC dynamics — use multiplication by reciprocal to avoid LpVariable / float
+    inv_eta = 1.0 / eta
+    dt_over_cap = dt_h / cap_kwh
     for t in range(N_QH):
-        prob += soc[t + 1] == soc[t] + (eta * p_ch[t] - p_dis[t] / eta) * dt_h / cap_kwh
+        prob += soc[t + 1] == soc[t] + (eta * p_ch[t] - inv_eta * p_dis[t]) * dt_over_cap
 
     # Ramp rate constraint
     if battery.ramp_rate_kw_per_min is not None:

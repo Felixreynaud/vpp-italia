@@ -129,6 +129,7 @@ class HuaweiBatteryStatus(BaseModel):
     temperature_c: float | None = Field(default=None, description="Cell temperature in °C")
     soh: float | None = Field(default=None, ge=0, le=100, description="State of Health %")
     status: int | None = Field(default=None, description="Huawei device status code")
+    dispatch_switch: int = Field(default=0, description="Active dispatch command: 0=stop, 1=charge, 2=discharge")
     # Derived
     is_charging: bool = False
     is_discharging: bool = False
