@@ -305,8 +305,8 @@ async def test_get_client_reuses_open_client() -> None:
         await gme._get_client()
         await gme._get_client()
 
-    # AsyncClient constructor should only be called once for auth
-    assert mock_cls.call_count == 1
+    # First call: 2 instantiations (auth + persistent client). Second call reuses the open client.
+    assert mock_cls.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -323,5 +323,5 @@ async def test_get_client_recreates_when_closed() -> None:
     with patch("connectors.gme.httpx.AsyncClient", return_value=auth_client) as mock_cls:
         await gme._get_client()
 
-    # Should have re-authenticated
-    assert mock_cls.call_count == 1
+    # Re-authentication: 2 instantiations (auth + new persistent client)
+    assert mock_cls.call_count == 2
