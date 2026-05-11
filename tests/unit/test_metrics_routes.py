@@ -13,7 +13,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_health_returns_ok(client) -> None:
-    resp = await client.get("/api/v1/health")
+    resp = await client.get("/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
@@ -25,7 +25,7 @@ async def test_health_returns_ok(client) -> None:
 @pytest.mark.asyncio
 async def test_health_database_degraded_when_no_session_factory(client) -> None:
     with patch("api.dependencies._session_factory", None):
-        resp = await client.get("/api/v1/health")
+        resp = await client.get("/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["database"] == "degraded"
@@ -47,7 +47,7 @@ async def test_health_database_ok_with_session_factory(client) -> None:
     mock_factory = MagicMock(return_value=mock_session)
 
     with patch("api.dependencies._session_factory", mock_factory):
-        resp = await client.get("/api/v1/health")
+        resp = await client.get("/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["database"] == "ok"
@@ -58,7 +58,7 @@ async def test_health_database_ok_with_session_factory(client) -> None:
 @pytest.mark.asyncio
 async def test_health_environment_from_env(client) -> None:
     with patch("os.getenv", side_effect=lambda k, d=None: "production" if k == "APP_ENV" else d):
-        resp = await client.get("/api/v1/health")
+        resp = await client.get("/health")
     assert resp.status_code == 200
 
 
@@ -69,7 +69,7 @@ async def test_health_environment_from_env(client) -> None:
 
 @pytest.mark.asyncio
 async def test_battery_metrics_returns_prometheus_text(client) -> None:
-    resp = await client.get("/api/v1/metrics/batteries")
+    resp = await client.get("/metrics/batteries")
     assert resp.status_code == 200
     assert "text/plain" in resp.headers["content-type"]
 
@@ -77,7 +77,7 @@ async def test_battery_metrics_returns_prometheus_text(client) -> None:
 @pytest.mark.asyncio
 async def test_battery_metrics_no_db_returns_error_comment(client) -> None:
     with patch("api.dependencies._session_factory", None):
-        resp = await client.get("/api/v1/metrics/batteries")
+        resp = await client.get("/metrics/batteries")
     assert resp.status_code == 200
     # Should contain an error comment line when DB is unavailable
     assert "# ERROR" in resp.text or resp.text.strip() == ""
@@ -105,7 +105,7 @@ async def test_battery_metrics_contains_help_lines_when_batteries_exist(client) 
     mock_factory = MagicMock(return_value=mock_session)
 
     with patch("api.dependencies._session_factory", mock_factory):
-        resp = await client.get("/api/v1/metrics/batteries")
+        resp = await client.get("/metrics/batteries")
 
     assert resp.status_code == 200
     assert "# HELP vpp_battery_soc_percent" in resp.text
@@ -119,7 +119,7 @@ async def test_battery_metrics_contains_help_lines_when_batteries_exist(client) 
 
 @pytest.mark.asyncio
 async def test_pnl_metrics_returns_structure(client) -> None:
-    resp = await client.get("/api/v1/metrics/pnl")
+    resp = await client.get("/metrics/pnl")
     assert resp.status_code == 200
     body = resp.json()
     assert "data" in body
@@ -135,7 +135,7 @@ async def test_pnl_metrics_returns_structure(client) -> None:
 @pytest.mark.asyncio
 async def test_pnl_metrics_zero_when_no_db(client) -> None:
     with patch("api.dependencies._session_factory", None):
-        resp = await client.get("/api/v1/metrics/pnl")
+        resp = await client.get("/metrics/pnl")
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["today_eur"] == 0.0
@@ -164,7 +164,7 @@ async def test_pnl_metrics_with_db_data(client) -> None:
         patch("api.dependencies._session_factory", mock_factory),
         patch("api.main._scheduler", None),
     ):
-        resp = await client.get("/api/v1/metrics/pnl")
+        resp = await client.get("/metrics/pnl")
 
     assert resp.status_code == 200
     data = resp.json()["data"]
@@ -175,7 +175,7 @@ async def test_pnl_metrics_with_db_data(client) -> None:
 
 @pytest.mark.asyncio
 async def test_pnl_metrics_meta_contains_date_boundaries(client) -> None:
-    resp = await client.get("/api/v1/metrics/pnl")
+    resp = await client.get("/metrics/pnl")
     assert resp.status_code == 200
     meta = resp.json()["meta"]
     assert "today_start" in meta
