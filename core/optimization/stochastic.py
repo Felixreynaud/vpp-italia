@@ -9,7 +9,6 @@ from __future__ import annotations
 import random
 import statistics
 from dataclasses import dataclass, field
-from typing import Any
 
 from core.dispatch.models import BatterySpec, DailySchedule
 from core.optimization.arbitrage import ArbitrageInput, ArbitrageOptimizer
@@ -21,10 +20,10 @@ _LAMBDA = 0.5  # risk-aversion parameter in E[rev] - lambda * CVaR objective
 class StochasticInput:
     """Inputs for scenario-based robust optimisation."""
 
-    prix_mgp_base: list[float]          # €/MWh, 24 hourly base prices
+    prix_mgp_base: list[float]  # €/MWh, 24 hourly base prices
     batteries: list[BatterySpec]
     n_scenarios: int = 20
-    incertitude_pct: float = 20.0       # +/-% uniform noise around base price
+    incertitude_pct: float = 20.0  # +/-% uniform noise around base price
     random_seed: int | None = None
 
 
@@ -32,10 +31,10 @@ class StochasticInput:
 class StochasticResult:
     """Outputs of scenario-based optimisation."""
 
-    schedule_robuste: DailySchedule     # best robust schedule
+    schedule_robuste: DailySchedule  # best robust schedule
     revenu_espere_eur: float
-    risque_p95_eur: float               # 95th-pct loss vs expected
-    scenarios_revenus: list[float]      # per-scenario revenues
+    risque_p95_eur: float  # 95th-pct loss vs expected
+    scenarios_revenus: list[float]  # per-scenario revenues
     metadata: dict = field(default_factory=dict)
 
 
@@ -55,7 +54,9 @@ class StochasticOptimizer:
             StochasticResult with robust schedule and risk statistics.
         """
         rng = random.Random(inp.random_seed)
-        scenarios = _generate_scenarios(inp.prix_mgp_base, inp.incertitude_pct, inp.n_scenarios, rng)
+        scenarios = _generate_scenarios(
+            inp.prix_mgp_base, inp.incertitude_pct, inp.n_scenarios, rng
+        )
 
         schedules, revenues = _evaluate_scenarios(scenarios, inp.batteries, self._arb)
 
@@ -90,10 +91,7 @@ def _generate_scenarios(
     bound = incertitude_pct / 100.0
     scenarios: list[list[float]] = []
     for _ in range(n_scenarios):
-        scenario = [
-            max(0.0, p * (1.0 + rng.uniform(-bound, bound)))
-            for p in base_prices
-        ]
+        scenario = [max(0.0, p * (1.0 + rng.uniform(-bound, bound))) for p in base_prices]
         scenarios.append(scenario)
     return scenarios
 

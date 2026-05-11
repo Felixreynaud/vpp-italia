@@ -9,7 +9,6 @@ from __future__ import annotations
 import math
 import statistics
 from dataclasses import dataclass, field
-from typing import Any
 
 from core.dispatch.models import BatterySpec, DailySchedule
 from core.dispatch.optimizer import DispatchOptimizer
@@ -28,9 +27,9 @@ _ANNUALISATION_FACTOR = math.sqrt(252)
 class ArbitrageInput:
     """Inputs for an MGP arbitrage optimisation."""
 
-    prix_mgp: list[float]          # €/MWh, 24 hourly values
+    prix_mgp: list[float]  # €/MWh, 24 hourly values
     batteries: list[BatterySpec]
-    mode: str = "standard"         # "conservateur" | "standard" | "agressif"
+    mode: str = "standard"  # "conservateur" | "standard" | "agressif"
     soc_initial_pct: float = 50.0
 
 
@@ -40,8 +39,8 @@ class ArbitrageResult:
 
     schedule: DailySchedule
     revenu_estime_eur: float
-    sharpe_ratio: float            # annualised Sharpe proxy
-    cvar_95_eur: float             # expected loss in worst 5% scenarios
+    sharpe_ratio: float  # annualised Sharpe proxy
+    cvar_95_eur: float  # expected loss in worst 5% scenarios
     metadata: dict = field(default_factory=dict)
 
 
@@ -79,7 +78,9 @@ class ArbitrageOptimizer:
                 "mode": inp.mode,
                 "n_scenarios": _N_SCENARIOS_RISK,
                 "mean_sim_revenue_eur": round(statistics.mean(sim_revenues), 2),
-                "std_sim_revenue_eur": round(statistics.stdev(sim_revenues) if len(sim_revenues) > 1 else 0.0, 2),
+                "std_sim_revenue_eur": round(
+                    statistics.stdev(sim_revenues) if len(sim_revenues) > 1 else 0.0, 2
+                ),
             },
         )
 
@@ -94,8 +95,7 @@ class ArbitrageOptimizer:
         remaining_hours = 24 - elapsed_hours
         if len(actual_prices) < remaining_hours:
             raise ValueError(
-                f"Need {remaining_hours} prices for remaining horizon, "
-                f"got {len(actual_prices)}"
+                f"Need {remaining_hours} prices for remaining horizon, got {len(actual_prices)}"
             )
         remaining_prices = actual_prices[:remaining_hours]
         updated = _apply_initial_soc(batteries, current_soc)
@@ -119,6 +119,7 @@ class ArbitrageOptimizer:
 
 def _apply_initial_soc(batteries: list[BatterySpec], soc_pct: float) -> list[BatterySpec]:
     from dataclasses import replace
+
     return [replace(b, initial_soc_pct=soc_pct) for b in batteries]
 
 

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import structlog
-from zoneinfo import ZoneInfo
 
 logger = structlog.get_logger(__name__)
 
@@ -89,5 +89,9 @@ class MarketScheduler:
         if target <= now:
             target += timedelta(days=1)
         wait_seconds = (target - now).total_seconds()
-        logger.debug("scheduler.next_trigger", target=target.isoformat(), wait_seconds=round(wait_seconds))
+        logger.debug(
+            "scheduler.next_trigger",
+            target=target.isoformat(),
+            wait_seconds=round(wait_seconds),
+        )
         await asyncio.sleep(wait_seconds)

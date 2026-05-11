@@ -8,19 +8,18 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
 class PeakShavingInput:
     """Inputs for a 24-hour peak-shaving optimisation."""
 
-    production_pv_kw: list[float]     # 24 hourly values
+    production_pv_kw: list[float]  # 24 hourly values
     consommation_site_kw: list[float]  # 24 hourly values
-    prix_mgp: list[float]              # €/MWh, 24 hourly values
-    soc_initial_pct: float             # 0–100
+    prix_mgp: list[float]  # €/MWh, 24 hourly values
+    soc_initial_pct: float  # 0–100
     capacite_kwh: float
-    puissance_max_kw: float = 108.0    # LUNA2000 constraint
+    puissance_max_kw: float = 108.0  # LUNA2000 constraint
     soc_min_pct: float = 10.0
     soc_max_pct: float = 90.0
     rendement_charge: float = 0.95
@@ -31,12 +30,12 @@ class PeakShavingInput:
 class PeakShavingResult:
     """Outputs of a 24-hour peak-shaving run."""
 
-    schedule_kw: list[float]           # 24 values (+charge, -decharge)
-    soc_evolution_pct: list[float]     # 25 values (initial + one per hour)
-    surplus_pv_kw: list[float]         # PV energy not used or stored
-    achat_reseau_kw: list[float]       # Grid purchases needed each hour
-    taux_autoconsommation_pct: float   # % of PV consumed locally
-    economie_estimee_eur: float        # vs baseline (no battery)
+    schedule_kw: list[float]  # 24 values (+charge, -decharge)
+    soc_evolution_pct: list[float]  # 25 values (initial + one per hour)
+    surplus_pv_kw: list[float]  # PV energy not used or stored
+    achat_reseau_kw: list[float]  # Grid purchases needed each hour
+    taux_autoconsommation_pct: float  # % of PV consumed locally
+    economie_estimee_eur: float  # vs baseline (no battery)
     metadata: dict = field(default_factory=dict)
 
 
@@ -172,5 +171,5 @@ def _compute_economie(
 ) -> float:
     return sum(
         (b - a) * p / 1000.0
-        for b, a, p in zip(achat_baseline, achat_reseau, prix_mgp)
+        for b, a, p in zip(achat_baseline, achat_reseau, prix_mgp, strict=False)
     )
