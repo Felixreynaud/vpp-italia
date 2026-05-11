@@ -226,3 +226,6 @@ __marimo__/
 .terraform.lock.hcl
 terraform.tfplan
 crash.log
+
+# Claude Code session cache
+.claude/
