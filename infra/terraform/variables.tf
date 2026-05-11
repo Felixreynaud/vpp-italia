@@ -74,7 +74,7 @@ variable "admin_cidr" {
 variable "ec2_instance_type" {
   description = "Type d'instance EC2 pour l'API FastAPI"
   type        = string
-  default     = "t3.medium"
+  default     = "t3.micro"
 }
 
 variable "ec2_ami_id" {

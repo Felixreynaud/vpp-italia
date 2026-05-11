@@ -219,7 +219,7 @@ resource "aws_iam_instance_profile" "ec2_api" {
 }
 
 # =============================================================================
-# EC2 - serveur API FastAPI (t3.medium)
+# EC2 - serveur API FastAPI (t3.micro)
 # =============================================================================
 
 resource "aws_key_pair" "deploy" {
@@ -277,7 +277,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "timescaledb" {
   identifier        = "vpp-italia-${var.environment}"
   engine            = "postgres"
-  engine_version    = "15.5"
+  engine_version    = "15"
   instance_class    = var.db_instance_class
   allocated_storage = 20
   max_allocated_storage = 100
