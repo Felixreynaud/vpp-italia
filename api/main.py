@@ -11,6 +11,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from api.dependencies import close_db, init_db
 from api.routes import batteries, dispatch, markets, metrics
+from api.routers.optimization import router as optimization_router
 from core.scheduler import MarketScheduler
 
 logger = structlog.get_logger(__name__)
@@ -40,7 +41,7 @@ app = FastAPI(
     title="VPP Italia API",
     description=(
         "API de pilotage pour centrale virtuelle (VPP) — "
-        "100+ batteries industrielles, marchés GME et Terna."
+        "100+ batteries industrielles, marches GME et Terna."
     ),
     version="0.1.0",
     docs_url="/docs",
@@ -48,10 +49,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
-
-# ---------------------------------------------------------------------------
-# Middleware
-# ---------------------------------------------------------------------------
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,19 +58,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Prometheus metrics
-# ---------------------------------------------------------------------------
-
 Instrumentator(
     should_group_status_codes=True,
     should_ignore_untemplated=True,
     excluded_handlers=["/health", "/metrics"],
 ).instrument(app).expose(app, endpoint="/metrics")
-
-# ---------------------------------------------------------------------------
-# Routers
-# ---------------------------------------------------------------------------
 
 API_PREFIX = "/api/v1"
 
@@ -81,20 +70,12 @@ app.include_router(batteries.router, prefix=API_PREFIX, tags=["batteries"])
 app.include_router(dispatch.router, prefix=API_PREFIX, tags=["dispatch"])
 app.include_router(markets.router, prefix=API_PREFIX, tags=["markets"])
 app.include_router(metrics.router, tags=["monitoring"])
-
-# ---------------------------------------------------------------------------
-# Root
-# ---------------------------------------------------------------------------
+app.include_router(optimization_router)
 
 
 @app.get("/", include_in_schema=False)
 async def root() -> dict:
     return {"name": "VPP Italia API", "version": app.version, "docs": "/docs"}
-
-
-# ---------------------------------------------------------------------------
-# Global exception handler — RFC 7807 Problem Details
-# ---------------------------------------------------------------------------
 
 
 @app.exception_handler(Exception)
