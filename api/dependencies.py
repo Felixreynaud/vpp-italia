@@ -1,6 +1,7 @@
 """Shared FastAPI dependencies: DB session, authentication."""
 
-from typing import Annotated, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Annotated
 
 import structlog
 from fastapi import Depends, HTTPException, status
@@ -77,7 +78,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
             raise credentials_exception
         return {"user_id": user_id, "roles": payload.get("roles", [])}
     except JWTError:
-        raise credentials_exception
+        raise credentials_exception from None
 
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]

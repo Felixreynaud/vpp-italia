@@ -1,7 +1,7 @@
 """VPP Italia — FastAPI application entry point."""
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import structlog
 from fastapi import FastAPI, Request, status
@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from api.dependencies import close_db, init_db
-from api.routes import batteries, dispatch, markets, metrics
 from api.routers.optimization import router as optimization_router
+from api.routes import batteries, dispatch, markets, metrics
 from core.scheduler import MarketScheduler
 
 logger = structlog.get_logger(__name__)
