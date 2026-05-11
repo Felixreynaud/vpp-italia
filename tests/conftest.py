@@ -3,16 +3,14 @@
 import asyncio
 import uuid
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from api.dependencies import get_current_user, get_db
 from api.main import app
-from api.dependencies import get_db, get_current_user
 from data.models import Base, Battery, BatteryProtocol, BatteryState
 
 

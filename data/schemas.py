@@ -84,7 +84,9 @@ class BatteryListResponse(BaseModel):
 
 
 class DispatchCommand(BaseModel):
-    power_kw: Decimal = Field(..., description="Target power in kW (positive=discharge, negative=charge)")
+    power_kw: Decimal = Field(
+        ..., description="Target power in kW (positive=discharge, negative=charge)"
+    )
     duration_minutes: int = Field(default=15, ge=1, le=60)
     reason: str | None = Field(default=None, max_length=256)
 
