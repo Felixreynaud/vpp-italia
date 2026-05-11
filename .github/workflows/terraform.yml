@@ -136,16 +136,30 @@ jobs:
             terraform import -var-file=terraform.tfvars -input=false "$1" "$2" || true
           }
 
-          imp aws_iam_role.ec2_api                         "vpp-ec2-api-${ENV}"
-          imp aws_key_pair.deploy                          "vpp-deploy-${ENV}"
-          imp aws_s3_bucket.logs                           "vpp-italia-logs-${ENV}-${ACCOUNT_ID}"
-          imp aws_s3_bucket.backups                        "vpp-italia-backups-${ENV}-${ACCOUNT_ID}"
-          imp aws_secretsmanager_secret.db_url             "vpp-italia/${ENV}/database-url"
-          imp aws_secretsmanager_secret.jwt_secret         "vpp-italia/${ENV}/jwt-secret-key"
-          imp aws_secretsmanager_secret.gme_password       "vpp-italia/${ENV}/gme-api-password"
+          imp aws_iam_role.ec2_api                          "vpp-ec2-api-${ENV}"
+          imp aws_iam_instance_profile.ec2_api              "vpp-ec2-api-${ENV}"
+          imp aws_key_pair.deploy                           "vpp-deploy-${ENV}"
+          imp aws_s3_bucket.logs                            "vpp-italia-logs-${ENV}-${ACCOUNT_ID}"
+          imp aws_s3_bucket.backups                         "vpp-italia-backups-${ENV}-${ACCOUNT_ID}"
+          imp aws_secretsmanager_secret.db_url              "vpp-italia/${ENV}/database-url"
+          imp aws_secretsmanager_secret.jwt_secret          "vpp-italia/${ENV}/jwt-secret-key"
+          imp aws_secretsmanager_secret.gme_password        "vpp-italia/${ENV}/gme-api-password"
           imp aws_secretsmanager_secret.terna_client_secret "vpp-italia/${ENV}/terna-client-secret"
-          imp aws_db_subnet_group.main                     "vpp-italia-${ENV}"
-          imp aws_db_parameter_group.timescaledb           "vpp-timescaledb-${ENV}"
+          imp aws_cloudwatch_log_group.api                  "/vpp/api/${ENV}"
+          imp aws_db_parameter_group.timescaledb            "vpp-timescaledb-${ENV}"
+
+      # ------------------------------------------------------------------
+      # Supprimer le DB subnet group existant pour laisser Terraform le recreer
+      # (le subnet group existant peut pointer sur des subnets differents)
+      # ------------------------------------------------------------------
+      - name: Supprimer DB subnet group existant
+        if: inputs.action == 'apply'
+        run: |
+          ENV="${{ inputs.environment }}"
+          aws rds delete-db-subnet-group \
+            --db-subnet-group-name "vpp-italia-${ENV}" \
+            --region "${{ env.AWS_REGION }}" || true
+          sleep 10
 
       # ------------------------------------------------------------------
       # Apply - uniquement si action == apply
