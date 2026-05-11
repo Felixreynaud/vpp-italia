@@ -89,7 +89,7 @@ class Backtester:
 
         results = await asyncio.gather(*[_simulate_day(d) for d in days], return_exceptions=True)
 
-        for d, result in zip(days, results):
+        for d, result in zip(days, results, strict=False):
             if isinstance(result, Exception):
                 logger.warning("backtester.day_failed", date=str(d), error=str(result))
                 daily_results.append({"date": str(d), "error": str(result), "pnl_eur": 0.0})
@@ -137,11 +137,13 @@ class Backtester:
             "efficiency": round(efficiency, 4),
             "avg_price_eur_mwh": round(sum(prices.values()) / len(prices), 2) if prices else 0.0,
             "peak_hours": sum(
-                1 for hs in schedule.hours.values()
+                1
+                for hs in schedule.hours.values()
                 if any(a.power_kw < 0 for a in hs.actions.values())
             ),
             "offpeak_hours": sum(
-                1 for hs in schedule.hours.values()
+                1
+                for hs in schedule.hours.values()
                 if any(a.power_kw > 0 for a in hs.actions.values())
             ),
         }

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import TYPE_CHECKING
+from datetime import UTC
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import websockets
@@ -14,7 +15,7 @@ from ocpp.v201 import call, call_result
 from ocpp.v201.enums import Action, RegistrationStatusType
 
 if TYPE_CHECKING:
-    from data.models import Battery
+    pass
 
 logger = structlog.get_logger(__name__)
 
@@ -24,15 +25,15 @@ class VPPChargePoint(CP):
 
     @on(Action.Heartbeat)
     async def on_heartbeat(self) -> call_result.Heartbeat:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        return call_result.Heartbeat(current_time=datetime.now(timezone.utc).isoformat())
+        return call_result.Heartbeat(current_time=datetime.now(UTC).isoformat())
 
     @on(Action.BootNotification)
     async def on_boot_notification(
-        self, charging_station: dict, reason: str, **kwargs
+        self, charging_station: dict, reason: str, **kwargs: Any
     ) -> call_result.BootNotification:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         logger.info(
             "ocpp.boot_notification",
@@ -41,13 +42,15 @@ class VPPChargePoint(CP):
             vendor=charging_station.get("vendor_name"),
         )
         return call_result.BootNotification(
-            current_time=datetime.now(timezone.utc).isoformat(),
+            current_time=datetime.now(UTC).isoformat(),
             interval=60,
             status=RegistrationStatusType.accepted,
         )
 
     @on(Action.MeterValues)
-    async def on_meter_values(self, evse_id: int, meter_value: list, **kwargs) -> call_result.MeterValues:
+    async def on_meter_values(
+        self, evse_id: int, meter_value: list, **kwargs: Any
+    ) -> call_result.MeterValues:
         logger.debug("ocpp.meter_values", charge_point_id=self.id, evse_id=evse_id)
         # Parse meter values and publish to Kafka
         return call_result.MeterValues()
@@ -67,13 +70,20 @@ class VPPChargePoint(CP):
                         {
                             "id": 1,
                             "chargingRateUnit": "W",
-                            "chargingSchedulePeriod": [{"startPeriod": 0, "limit": abs(power_kw) * 1000}],
+                            "chargingSchedulePeriod": [
+                                {"startPeriod": 0, "limit": abs(power_kw) * 1000}
+                            ],
                         }
                     ],
                 },
             )
         )
-        logger.info("ocpp.charging_profile_set", charge_point_id=self.id, power_kw=power_kw, command_id=command_id)
+        logger.info(
+            "ocpp.charging_profile_set",
+            charge_point_id=self.id,
+            power_kw=power_kw,
+            command_id=command_id,
+        )
         return command_id
 
 
@@ -95,7 +105,9 @@ class OCPPServer:
         ):
             await asyncio.Future()
 
-    async def _on_connect(self, websocket: websockets.WebSocketServerProtocol, path: str) -> None:
+    async def _on_connect(
+        self, websocket: websockets.WebSocketServerProtocol, path: str
+    ) -> None:
         charge_point_id = path.strip("/").split("/")[-1]
         cp = VPPChargePoint(charge_point_id, websocket)
         self._charge_points[charge_point_id] = cp
