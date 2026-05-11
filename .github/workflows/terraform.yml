@@ -21,7 +21,7 @@ on:
           - staging
           - production
 
-# Un seul job Terraform à la fois par environnement
+# Un seul job Terraform a la fois par environnement
 concurrency:
   group: terraform-${{ inputs.environment }}
   cancel-in-progress: false
@@ -35,8 +35,8 @@ jobs:
     name: Terraform ${{ inputs.action }} (${{ inputs.environment }})
     runs-on: ubuntu-latest
 
-    # Protection supplémentaire : destroy en production nécessite une approbation.
-    # Décommenter uniquement si les GitHub Environments staging/production sont créés dans Settings.
+    # Protection supplementaire : destroy en production necessite une approbation.
+    # Decommenter uniquement si les GitHub Environments staging/production sont crees dans Settings.
     # environment: ${{ inputs.action == 'destroy' && 'production-destroy' || inputs.environment }}
 
     defaults:
@@ -70,13 +70,12 @@ jobs:
           terraform_version: "~1.7"
 
       # ------------------------------------------------------------------
-      # Générer terraform.tfvars depuis les secrets GitHub
-      # Les secrets sont définis dans : Settings → Secrets → Actions
+      # Generer terraform.tfvars depuis les secrets GitHub
       # Secrets requis :
-      #   TF_VAR_AWS_ACCOUNT_ID   — ID du compte AWS (12 chiffres)
-      #   TF_VAR_DB_PASSWORD      — Mot de passe RDS (≥ 16 chars)
-      #   TF_VAR_EC2_PUBLIC_KEY   — Contenu de ~/.ssh/vpp-deploy.pub
-      #   TF_VAR_ADMIN_CIDR       — CIDR SSH admin (ex: "203.0.113.5/32")
+      #   TF_VAR_AWS_ACCOUNT_ID   - ID du compte AWS (12 chiffres)
+      #   TF_VAR_DB_PASSWORD      - Mot de passe RDS (>= 16 chars)
+      #   TF_VAR_EC2_PUBLIC_KEY   - Contenu de ~/.ssh/vpp-deploy.pub
+      #   TF_VAR_ADMIN_CIDR       - CIDR SSH admin (ex: "203.0.113.5/32")
       # ------------------------------------------------------------------
       - name: Create terraform.tfvars
         env:
@@ -93,7 +92,7 @@ jobs:
           echo "admin_cidr     = \"$TF_ADMIN_CIDR\""    >> terraform.tfvars
 
       # ------------------------------------------------------------------
-      # Init — toujours exécuté
+      # Init - toujours execute
       # ------------------------------------------------------------------
       - name: Terraform init
         run: terraform init -input=false
@@ -102,7 +101,7 @@ jobs:
         run: terraform validate
 
       # ------------------------------------------------------------------
-      # Plan — toujours exécuté (affiché en résumé du job)
+      # Plan - toujours execute (affiche en resume du job)
       # ------------------------------------------------------------------
       - name: Terraform plan
         id: plan
@@ -114,22 +113,48 @@ jobs:
             -no-color \
             2>&1 | tee plan_output.txt
 
-          echo "## Terraform Plan — ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "## Terraform Plan - ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -50 plan_output.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Apply — uniquement si action == apply
+      # Import - ressources existantes a integrer dans le state
+      # Execute uniquement si action == apply
+      # Chaque import est tolerant a l echec (|| true) car la ressource
+      # peut deja etre dans le state lors des runs suivants.
+      # ------------------------------------------------------------------
+      - name: Terraform import ressources existantes
+        if: inputs.action == 'apply'
+        run: |
+          ENV="${{ inputs.environment }}"
+
+          terraform import -var-file=terraform.tfvars -input=false \
+            aws_db_subnet_group.main "vpp-italia-${ENV}" || true
+
+          terraform import -var-file=terraform.tfvars -input=false \
+            aws_db_parameter_group.timescaledb "vpp-timescaledb-${ENV}" || true
+
+          terraform import -var-file=terraform.tfvars -input=false \
+            aws_s3_bucket.logs "vpp-italia-logs-${ENV}" || true
+
+          terraform import -var-file=terraform.tfvars -input=false \
+            aws_s3_bucket.backups "vpp-italia-backups-${ENV}" || true
+
+          terraform import -var-file=terraform.tfvars -input=false \
+            aws_cloudwatch_log_group.api "/vpp/api/${ENV}" || true
+
+      # ------------------------------------------------------------------
+      # Apply - uniquement si action == apply
       # ------------------------------------------------------------------
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: |
           terraform apply -input=false -auto-approve tfplan
-          echo "## Apply terminé" >> $GITHUB_STEP_SUMMARY
+          echo "## Apply termine" >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Outputs — affichés après apply
+      # Outputs - affiches apres apply
       # ------------------------------------------------------------------
       - name: Afficher les outputs Terraform
         if: inputs.action == 'apply'
@@ -141,7 +166,6 @@ jobs:
           cat outputs.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-          # Extraire les valeurs clés pour les steps suivants
           EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null || echo "")
           RDS_EP=$(terraform output -raw rds_endpoint  2>/dev/null || echo "")
           S3_LOGS=$(terraform output -raw s3_logs_bucket_name 2>/dev/null || echo "")
@@ -159,14 +183,9 @@ jobs:
           echo "  S3 backups bucket : $S3_BACK"
 
       # ------------------------------------------------------------------
-      # Post-apply : renseigner les paramètres SSM indispensables au
-      # démarrage de l'API (database-url, jwt-secret-key, etc.)
-      # Secrets requis supplémentaires :
-      #   SSM_GME_API_PASSWORD      — mot de passe API GME
-      #   SSM_TERNA_CLIENT_SECRET   — client secret Terna
-      #   SSM_HUAWEI_CLIENT_SECRET  — client secret Huawei FusionSolar
+      # Post-apply : renseigner les parametres SSM
       # ------------------------------------------------------------------
-      - name: Provisionner les paramètres SSM
+      - name: Provisionner les parametres SSM
         if: inputs.action == 'apply'
         env:
           EC2_IP:   ${{ steps.tf_outputs.outputs.ec2_ip }}
@@ -190,7 +209,7 @@ jobs:
               --overwrite \
               --region "$REGION" \
               --no-cli-pager
-            echo "  SSM $PREFIX/$name → OK"
+            echo "  SSM $PREFIX/$name OK"
           }
 
           DB_URL="postgresql+asyncpg://vpp:${DB_PASS}@${RDS_EP}/vpp_italia"
@@ -200,52 +219,52 @@ jobs:
           put_param "terna-client-secret" "$TERNA_SC"
           put_param "huawei-client-secret" "$HW_SC"
 
-          echo "Paramètres SSM provisionnés." >> $GITHUB_STEP_SUMMARY
+          echo "Parametres SSM provisionnes." >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Post-apply : attendre que l'API démarre et faire un smoke test
+      # Post-apply : smoke test API
       # ------------------------------------------------------------------
       - name: Smoke test API
         if: inputs.action == 'apply'
         env:
           EC2_IP: ${{ steps.tf_outputs.outputs.ec2_ip }}
         run: |
-          echo "Attente démarrage API (EC2 userdata ~3min)..."
+          echo "Attente demarrage API (EC2 userdata ~3min)..."
           for i in $(seq 1 18); do
             STATUS=$(curl -sf --max-time 5 "http://$EC2_IP:8000/health" \
                      -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
-              echo "API opérationnelle (tentative $i/18)"
+              echo "API operationnelle (tentative $i/18)"
               curl -s "http://$EC2_IP:8000/health" | python3 -m json.tool
               break
             fi
-            echo "  [${i}/18] HTTP $STATUS — nouvelle tentative dans 10s..."
+            echo "  [${i}/18] HTTP $STATUS - nouvelle tentative dans 10s..."
             sleep 10
           done
 
           if [ "$STATUS" != "200" ]; then
-            echo "ERREUR : API non accessible après 3 minutes"
+            echo "ERREUR : API non accessible apres 3 minutes"
             echo "Logs disponibles via : ssh ubuntu@$EC2_IP 'journalctl -u vpp-api -n 50'"
             exit 1
           fi
 
       # ------------------------------------------------------------------
-      # Destroy — uniquement si action == destroy
+      # Destroy - uniquement si action == destroy
       # ------------------------------------------------------------------
       - name: Terraform destroy
         if: inputs.action == 'destroy'
         run: |
-          echo "DESTRUCTION de l'infrastructure ${{ inputs.environment }}..."
+          echo "DESTRUCTION de l infrastructure ${{ inputs.environment }}..."
           terraform destroy \
             -var-file=terraform.tfvars \
             -input=false \
             -auto-approve \
             -no-color
 
-          echo "## Infrastructure ${{ inputs.environment }} détruite" >> $GITHUB_STEP_SUMMARY
+          echo "## Infrastructure ${{ inputs.environment }} detruite" >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Nettoyage — toujours exécuté pour ne pas laisser de secrets sur le runner
+      # Nettoyage - toujours execute
       # ------------------------------------------------------------------
       - name: Nettoyer les fichiers sensibles
         if: always()
