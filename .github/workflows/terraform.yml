@@ -136,6 +136,7 @@ jobs:
             terraform import -var-file=terraform.tfvars -input=false "$1" "$2" || true
           }
 
+          imp aws_vpc.main                                  "vpc-074e13791dd20593a"
           imp aws_iam_role.ec2_api                          "vpp-ec2-api-${ENV}"
           imp aws_iam_instance_profile.ec2_api              "vpp-ec2-api-${ENV}"
           imp aws_key_pair.deploy                           "vpp-deploy-${ENV}"
