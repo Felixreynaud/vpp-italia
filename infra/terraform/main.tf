@@ -7,8 +7,8 @@ terraform {
     }
   }
 
-  # Backend S3 pour stocker le state Terraform en équipe.
-  # À décommenter après avoir créé le bucket manuellement une première fois.
+  # Backend S3 pour stocker le state Terraform en equipe.
+  # A decommenter apres avoir cree le bucket manuellement une premiere fois.
   # backend "s3" {
   #   bucket         = "vpp-italia-terraform-state"
   #   key            = "prod/terraform.tfstate"
@@ -30,7 +30,7 @@ provider "aws" {
 }
 
 # =============================================================================
-# VPC - réseau dédié VPP Italia
+# VPC - reseau dedie VPP Italia
 # =============================================================================
 
 resource "aws_vpc" "main" {
@@ -41,7 +41,7 @@ resource "aws_vpc" "main" {
   tags = { Name = "vpp-italia-${var.environment}" }
 }
 
-# Sous-réseau public - EC2 API (accès Internet entrant)
+# Sous-reseau public - EC2 API (acces Internet entrant)
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr
@@ -51,7 +51,7 @@ resource "aws_subnet" "public" {
   tags = { Name = "vpp-public-${var.environment}" }
 }
 
-# Sous-réseau privé - RDS (aucun accès Internet direct)
+# Sous-reseau prive - RDS (aucun acces Internet direct)
 resource "aws_subnet" "private_a" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.private_subnet_cidr_a
@@ -68,7 +68,7 @@ resource "aws_subnet" "private_b" {
   tags = { Name = "vpp-private-b-${var.environment}" }
 }
 
-# Internet Gateway - sortie Internet pour le sous-réseau public
+# Internet Gateway - sortie Internet pour le sous-reseau public
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
   tags   = { Name = "vpp-igw-${var.environment}" }
@@ -95,7 +95,7 @@ resource "aws_route_table_association" "public" {
 # Security Groups
 # =============================================================================
 
-# SG API - port 8000 ouvert en entrée, SSH restreint à l'IP admin
+# SG API - port 8000 ouvert en entree, SSH restreint a l IP admin
 resource "aws_security_group" "api" {
   name        = "vpp-api-${var.environment}"
   description = "FastAPI VPP - port 8000 public, SSH admin"
@@ -127,10 +127,10 @@ resource "aws_security_group" "api" {
   tags = { Name = "vpp-sg-api-${var.environment}" }
 }
 
-# SG RDS - port 5432 accessible uniquement depuis le SG de l'API
+# SG RDS - port 5432 accessible uniquement depuis le SG de l API
 resource "aws_security_group" "rds" {
   name        = "vpp-rds-${var.environment}"
-  description = "TimescaleDB - accessible uniquement depuis l'EC2 API"
+  description = "TimescaleDB - accessible uniquement depuis l EC2 API"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -243,7 +243,7 @@ resource "aws_instance" "api" {
   tags = { Name = "vpp-api-${var.environment}" }
 
   lifecycle {
-    # Ne pas recréer l'instance si l'AMI change (déploiement via SSH)
+    # Ne pas recreer l instance si l AMI change (deploiement via SSH)
     ignore_changes = [ami, user_data]
   }
 }
@@ -291,7 +291,7 @@ resource "aws_db_instance" "timescaledb" {
   backup_window           = "02:00-03:00"
   maintenance_window      = "sun:03:00-sun:04:00"
 
-  # Paramètres TimescaleDB - nécessite un parameter group personnalisé
+  # Parametres TimescaleDB - necessite un parameter group personnalise
   parameter_group_name = aws_db_parameter_group.timescaledb.name
 
   tags = { Name = "vpp-rds-${var.environment}" }
@@ -347,7 +347,7 @@ resource "aws_s3_bucket_public_access_block" "logs" {
   restrict_public_buckets = true
 }
 
-# Logs conservés 30 jours puis supprimés
+# Logs conserves 30 jours puis supprimes
 resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   bucket = aws_s3_bucket.logs.id
 
@@ -390,7 +390,7 @@ resource "aws_s3_bucket_public_access_block" "backups" {
   restrict_public_buckets = true
 }
 
-# Backups -> Glacier après 30 jours, supprimés après 90 jours
+# Backups -> Glacier apres 30 jours, supprimes apres 90 jours
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id
 
