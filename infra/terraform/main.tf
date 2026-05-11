@@ -29,6 +29,15 @@ provider "aws" {
   }
 }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+}
+
 # =============================================================================
 # VPC - reseau dedie VPP Italia
 # =============================================================================
@@ -219,7 +228,7 @@ resource "aws_key_pair" "deploy" {
 }
 
 resource "aws_instance" "api" {
-  ami                    = var.ec2_ami_id
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.ec2_instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.api.id]
@@ -256,7 +265,7 @@ resource "aws_eip" "api" {
 }
 
 # =============================================================================
-# RDS - PostgreSQL 15 / TimescaleDB (db.t3.micro)
+# RDS - PostgreSQL 15
 # =============================================================================
 
 resource "aws_db_subnet_group" "main" {
@@ -287,11 +296,10 @@ resource "aws_db_instance" "timescaledb" {
   skip_final_snapshot    = var.environment != "production"
   final_snapshot_identifier = var.environment == "production" ? "vpp-italia-final-snapshot" : null
 
-  backup_retention_period = 7
+  backup_retention_period = 0
   backup_window           = "02:00-03:00"
   maintenance_window      = "sun:03:00-sun:04:00"
 
-  # Parametres TimescaleDB - necessite un parameter group personnalise
   parameter_group_name = aws_db_parameter_group.timescaledb.name
 
   tags = { Name = "vpp-rds-${var.environment}" }
@@ -303,7 +311,7 @@ resource "aws_db_parameter_group" "timescaledb" {
 
   parameter {
     name         = "shared_preload_libraries"
-    value        = "timescaledb"
+    value        = "pg_stat_statements"
     apply_method = "pending-reboot"
   }
 
