@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,7 +19,6 @@ from core.dispatch.models import (
 from core.dispatch.optimizer import DispatchOptimizer
 from core.dispatch.scheduler import DispatchScheduler
 from core.market.gme_client import GMEPriceClient
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -52,8 +50,16 @@ def make_daily_schedule(
         status=ScheduleStatus.PLANNED,
     )
     for h in range(24):
-        action_type = ActionType.CHARGE if h < 6 else ActionType.DISCHARGE if h >= 18 else ActionType.STOP
-        power = 50.0 if action_type == ActionType.CHARGE else -50.0 if action_type == ActionType.DISCHARGE else 0.0
+        action_type = (
+            ActionType.CHARGE if h < 6 else ActionType.DISCHARGE if h >= 18 else ActionType.STOP
+        )
+        power = (
+            50.0
+            if action_type == ActionType.CHARGE
+            else -50.0
+            if action_type == ActionType.DISCHARGE
+            else 0.0
+        )
         hs = HourlySchedule(
             hour=h,
             hour_price_eur_mwh=80.0,
@@ -162,23 +168,19 @@ async def test_fetch_and_optimize_stores_schedule() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_and_optimize_uses_tomorrow_by_default() -> None:
-    from datetime import timedelta
     from zoneinfo import ZoneInfo
 
     gme = make_gme_mock()
     scheduler = make_scheduler(gme=gme)
 
     with patch("core.dispatch.scheduler.datetime") as mock_dt:
-        today = date(2025, 6, 1)
-        mock_dt.now.return_value = datetime(2025, 6, 1, 14, 0, 0, tzinfo=ZoneInfo("Europe/Rome"))
-        mock_dt.now.return_value.date.return_value = today
-        # Use real datetime for DailySchedule creation
+        now = datetime(2025, 6, 1, 14, 0, 0, tzinfo=ZoneInfo("Europe/Rome"))
+        mock_dt.now.return_value = now
         mock_dt.utcnow = datetime.utcnow
         mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 
         schedule = await scheduler._fetch_and_optimize()
 
-    # Schedule should be for some future date (not raising)
     assert schedule is not None
 
 
