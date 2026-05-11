@@ -30,7 +30,7 @@ provider "aws" {
 }
 
 # =============================================================================
-# VPC — réseau dédié VPP Italia
+# VPC - réseau dédié VPP Italia
 # =============================================================================
 
 resource "aws_vpc" "main" {
@@ -41,7 +41,7 @@ resource "aws_vpc" "main" {
   tags = { Name = "vpp-italia-${var.environment}" }
 }
 
-# Sous-réseau public — EC2 API (accès Internet entrant)
+# Sous-réseau public - EC2 API (accès Internet entrant)
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr
@@ -51,7 +51,7 @@ resource "aws_subnet" "public" {
   tags = { Name = "vpp-public-${var.environment}" }
 }
 
-# Sous-réseau privé — RDS (aucun accès Internet direct)
+# Sous-réseau privé - RDS (aucun accès Internet direct)
 resource "aws_subnet" "private_a" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.private_subnet_cidr_a
@@ -68,7 +68,7 @@ resource "aws_subnet" "private_b" {
   tags = { Name = "vpp-private-b-${var.environment}" }
 }
 
-# Internet Gateway — sortie Internet pour le sous-réseau public
+# Internet Gateway - sortie Internet pour le sous-réseau public
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
   tags   = { Name = "vpp-igw-${var.environment}" }
@@ -95,10 +95,10 @@ resource "aws_route_table_association" "public" {
 # Security Groups
 # =============================================================================
 
-# SG API — port 8000 ouvert en entrée, SSH restreint à l'IP admin
+# SG API - port 8000 ouvert en entrée, SSH restreint à l'IP admin
 resource "aws_security_group" "api" {
   name        = "vpp-api-${var.environment}"
-  description = "FastAPI VPP — port 8000 public, SSH admin"
+  description = "FastAPI VPP - port 8000 public, SSH admin"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -127,10 +127,10 @@ resource "aws_security_group" "api" {
   tags = { Name = "vpp-sg-api-${var.environment}" }
 }
 
-# SG RDS — port 5432 accessible uniquement depuis le SG de l'API
+# SG RDS - port 5432 accessible uniquement depuis le SG de l'API
 resource "aws_security_group" "rds" {
   name        = "vpp-rds-${var.environment}"
-  description = "TimescaleDB — accessible uniquement depuis l'EC2 API"
+  description = "TimescaleDB - accessible uniquement depuis l'EC2 API"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -152,7 +152,7 @@ resource "aws_security_group" "rds" {
 }
 
 # =============================================================================
-# IAM — profil instance EC2
+# IAM - profil instance EC2
 # =============================================================================
 
 resource "aws_iam_role" "ec2_api" {
@@ -210,7 +210,7 @@ resource "aws_iam_instance_profile" "ec2_api" {
 }
 
 # =============================================================================
-# EC2 — serveur API FastAPI (t3.medium)
+# EC2 - serveur API FastAPI (t3.medium)
 # =============================================================================
 
 resource "aws_key_pair" "deploy" {
@@ -256,7 +256,7 @@ resource "aws_eip" "api" {
 }
 
 # =============================================================================
-# RDS — PostgreSQL 15 / TimescaleDB (db.t3.micro)
+# RDS - PostgreSQL 15 / TimescaleDB (db.t3.micro)
 # =============================================================================
 
 resource "aws_db_subnet_group" "main" {
@@ -291,7 +291,7 @@ resource "aws_db_instance" "timescaledb" {
   backup_window           = "02:00-03:00"
   maintenance_window      = "sun:03:00-sun:04:00"
 
-  # Paramètres TimescaleDB — nécessite un parameter group personnalisé
+  # Paramètres TimescaleDB - nécessite un parameter group personnalisé
   parameter_group_name = aws_db_parameter_group.timescaledb.name
 
   tags = { Name = "vpp-rds-${var.environment}" }
@@ -315,7 +315,7 @@ resource "aws_db_parameter_group" "timescaledb" {
 }
 
 # =============================================================================
-# S3 — logs applicatifs
+# S3 - logs applicatifs
 # =============================================================================
 
 resource "aws_s3_bucket" "logs" {
@@ -358,7 +358,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
 }
 
 # =============================================================================
-# S3 — backups BDD
+# S3 - backups BDD
 # =============================================================================
 
 resource "aws_s3_bucket" "backups" {
@@ -388,7 +388,7 @@ resource "aws_s3_bucket_public_access_block" "backups" {
   restrict_public_buckets = true
 }
 
-# Backups → Glacier après 30 jours, supprimés après 90 jours
+# Backups -> Glacier après 30 jours, supprimés après 90 jours
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket = aws_s3_bucket.backups.id
 
@@ -405,7 +405,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
 }
 
 # =============================================================================
-# CloudWatch — logs API
+# CloudWatch - logs API
 # =============================================================================
 
 resource "aws_cloudwatch_log_group" "api" {
@@ -415,7 +415,7 @@ resource "aws_cloudwatch_log_group" "api" {
 }
 
 # =============================================================================
-# Secrets Manager — credentials applicatifs
+# Secrets Manager - credentials applicatifs
 # =============================================================================
 
 resource "aws_secretsmanager_secret" "db_url" {
