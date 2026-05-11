@@ -1,7 +1,5 @@
 """Unit tests for the LP optimizer."""
 
-import pytest
-
 from core.optimizer import BatteryParams, MarketSignal, optimize_battery
 
 
@@ -17,7 +15,9 @@ def make_battery(**kwargs) -> BatteryParams:
 
 
 def make_signals(price: float = 80.0, direction: str = "BOTH") -> list[MarketSignal]:
-    return [MarketSignal(quarter_hour=t, price_eur_mwh=price, direction=direction) for t in range(96)]
+    return [
+        MarketSignal(quarter_hour=t, price_eur_mwh=price, direction=direction) for t in range(96)
+    ]
 
 
 def test_optimize_returns_96_setpoints():
