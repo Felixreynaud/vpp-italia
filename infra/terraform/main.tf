@@ -302,13 +302,15 @@ resource "aws_db_parameter_group" "timescaledb" {
   family = "postgres15"
 
   parameter {
-    name  = "shared_preload_libraries"
-    value = "timescaledb"
+    name         = "shared_preload_libraries"
+    value        = "timescaledb"
+    apply_method = "pending-reboot"
   }
 
   parameter {
-    name  = "max_connections"
-    value = "200"
+    name         = "max_connections"
+    value        = "200"
+    apply_method = "pending-reboot"
   }
 
   tags = { Name = "vpp-pg-timescaledb-${var.environment}" }
