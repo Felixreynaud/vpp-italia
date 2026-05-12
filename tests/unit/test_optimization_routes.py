@@ -131,12 +131,8 @@ async def test_arbitrage_success(client, db_session) -> None:
     site_id = uuid.uuid4()
     await _make_battery(db_session, site_id)
 
-    resp = await client.post(
-        f"{BASE}/arbitrage",
-        params={"site_id": str(site_id)},
-        json={"prix_mgp": PRICES_24},
-        headers=AUTH,
-    )
+    params = [("site_id", str(site_id))] + [("prix_mgp", v) for v in PRICES_24]
+    resp = await client.post(f"{BASE}/arbitrage", params=params, headers=AUTH)
     assert resp.status_code == 200
     body = resp.json()
     assert "data" in body
@@ -148,12 +144,10 @@ async def test_arbitrage_conservateur_mode(client, db_session) -> None:
     site_id = uuid.uuid4()
     await _make_battery(db_session, site_id)
 
-    resp = await client.post(
-        f"{BASE}/arbitrage",
-        params={"site_id": str(site_id), "mode": "conservateur"},
-        json={"prix_mgp": PRICES_24},
-        headers=AUTH,
-    )
+    params = [("site_id", str(site_id)), ("mode", "conservateur")] + [
+        ("prix_mgp", v) for v in PRICES_24
+    ]
+    resp = await client.post(f"{BASE}/arbitrage", params=params, headers=AUTH)
     assert resp.status_code == 200
 
 
@@ -162,12 +156,8 @@ async def test_arbitrage_invalid_mode_returns_422(client, db_session) -> None:
     site_id = uuid.uuid4()
     await _make_battery(db_session, site_id)
 
-    resp = await client.post(
-        f"{BASE}/arbitrage",
-        params={"site_id": str(site_id), "mode": "turbo"},
-        json={"prix_mgp": PRICES_24},
-        headers=AUTH,
-    )
+    params = [("site_id", str(site_id)), ("mode", "turbo")] + [("prix_mgp", v) for v in PRICES_24]
+    resp = await client.post(f"{BASE}/arbitrage", params=params, headers=AUTH)
     assert resp.status_code == 422
 
 
@@ -176,12 +166,8 @@ async def test_arbitrage_wrong_length_returns_422(client, db_session) -> None:
     site_id = uuid.uuid4()
     await _make_battery(db_session, site_id)
 
-    resp = await client.post(
-        f"{BASE}/arbitrage",
-        params={"site_id": str(site_id)},
-        json={"prix_mgp": [50.0] * 12},
-        headers=AUTH,
-    )
+    params = [("site_id", str(site_id))] + [("prix_mgp", v) for v in [50.0] * 12]
+    resp = await client.post(f"{BASE}/arbitrage", params=params, headers=AUTH)
     assert resp.status_code == 422
 
 
@@ -195,12 +181,10 @@ async def test_stochastique_success(client, db_session) -> None:
     site_id = uuid.uuid4()
     await _make_battery(db_session, site_id)
 
-    resp = await client.post(
-        f"{BASE}/stochastique",
-        params={"site_id": str(site_id), "n_scenarios": 5},
-        json={"prix_mgp_base": PRICES_24},
-        headers=AUTH,
-    )
+    params = [("site_id", str(site_id)), ("n_scenarios", 5)] + [
+        ("prix_mgp_base", v) for v in PRICES_24
+    ]
+    resp = await client.post(f"{BASE}/stochastique", params=params, headers=AUTH)
     assert resp.status_code == 200
     body = resp.json()
     assert "revenu_espere_eur" in body["data"]
@@ -211,12 +195,8 @@ async def test_stochastique_wrong_length_returns_422(client, db_session) -> None
     site_id = uuid.uuid4()
     await _make_battery(db_session, site_id)
 
-    resp = await client.post(
-        f"{BASE}/stochastique",
-        params={"site_id": str(site_id)},
-        json={"prix_mgp_base": [50.0] * 5},
-        headers=AUTH,
-    )
+    params = [("site_id", str(site_id))] + [("prix_mgp_base", v) for v in [50.0] * 5]
+    resp = await client.post(f"{BASE}/stochastique", params=params, headers=AUTH)
     assert resp.status_code == 422
 
 
