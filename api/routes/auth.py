@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -52,7 +52,7 @@ async def login(req: LoginRequest) -> dict[str, Any]:
             )
         roles = ["admin"] if req.username == "admin" else ["operator"]
 
-    expires = datetime.now(timezone.utc) + timedelta(hours=8)
+    expires = datetime.now(UTC) + timedelta(hours=8)
     payload = {
         "sub": req.username,
         "roles": roles,
