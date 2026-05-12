@@ -266,7 +266,7 @@ async def run_backtest(
     if (date_end - date_start).days > 365:
         raise HTTPException(status_code=422, detail="Backtest range cannot exceed 365 days")
 
-    zone = payload.get("zone") or os.getenv("GME_ZONE", "SUD")
+    zone: str = str(payload.get("zone") or os.getenv("GME_ZONE", "SUD"))
     raw_batteries = payload.get("batteries") or []
     batteries = [
         BatterySpec(
