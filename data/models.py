@@ -78,7 +78,9 @@ class Battery(Base):
     min_soc_percent = Column(Numeric(5, 2), nullable=False, default=10.0)
     max_soc_percent = Column(Numeric(5, 2), nullable=False, default=90.0)
     ramp_rate_kw_per_min = Column(Numeric(8, 2), nullable=True)
-    state: Column[BatteryState] = Column(Enum(BatteryState), nullable=False, default=BatteryState.OFFLINE)
+    state: Column[BatteryState] = Column(
+        Enum(BatteryState), nullable=False, default=BatteryState.OFFLINE
+    )
     is_active = Column(Boolean, nullable=False, default=True)
     metadata_ = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -132,7 +134,9 @@ class DispatchPlan(Base):
     power_kw = Column(
         Numeric(10, 2), nullable=False, comment="Target power setpoint (+ discharge, - charge)"
     )
-    source: Column[DispatchSource] = Column(Enum(DispatchSource), nullable=False, default=DispatchSource.OPTIMIZER)
+    source: Column[DispatchSource] = Column(
+        Enum(DispatchSource), nullable=False, default=DispatchSource.OPTIMIZER
+    )
     optimization_run_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -156,7 +160,9 @@ class MarketOffer(Base):
     external_id = Column(
         String(128), nullable=True, comment="ID returned by GME/Terna after submission"
     )
-    status: Column[OfferStatus] = Column(Enum(OfferStatus), nullable=False, default=OfferStatus.DRAFT)
+    status: Column[OfferStatus] = Column(
+        Enum(OfferStatus), nullable=False, default=OfferStatus.DRAFT
+    )
     response_payload = Column(JSON, nullable=True)
     submitted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
