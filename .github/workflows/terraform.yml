@@ -35,10 +35,6 @@ jobs:
     name: Terraform ${{ inputs.action }} (${{ inputs.environment }})
     runs-on: ubuntu-latest
 
-    # Protection supplementaire : destroy en production necessite une approbation.
-    # Decommenter uniquement si les GitHub Environments staging/production sont crees dans Settings.
-    # environment: ${{ inputs.action == 'destroy' && 'production-destroy' || inputs.environment }}
-
     defaults:
       run:
         working-directory: infra/terraform
@@ -71,28 +67,23 @@ jobs:
 
       # ------------------------------------------------------------------
       # Generer terraform.tfvars depuis les secrets GitHub
-      # Secrets requis :
-      #   TF_VAR_AWS_ACCOUNT_ID   - ID du compte AWS (12 chiffres)
-      #   TF_VAR_DB_PASSWORD      - Mot de passe RDS (>= 16 chars)
-      #   TF_VAR_EC2_PUBLIC_KEY   - Contenu de ~/.ssh/vpp-deploy.pub
-      #   TF_VAR_ADMIN_CIDR       - CIDR SSH admin (ex: "203.0.113.5/32")
       # ------------------------------------------------------------------
       - name: Create terraform.tfvars
         env:
-          TF_ACCOUNT_ID:    ${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}
-          TF_ENVIRONMENT:   ${{ inputs.environment }}
-          TF_DB_PASSWORD:   ${{ secrets.TF_VAR_DB_PASSWORD }}
+          TF_ACCOUNT_ID:     ${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}
+          TF_ENVIRONMENT:    ${{ inputs.environment }}
+          TF_DB_PASSWORD:    ${{ secrets.TF_VAR_DB_PASSWORD }}
           TF_EC2_PUBLIC_KEY: ${{ secrets.TF_VAR_EC2_PUBLIC_KEY }}
-          TF_ADMIN_CIDR:    ${{ secrets.TF_VAR_ADMIN_CIDR }}
+          TF_ADMIN_CIDR:     ${{ secrets.TF_VAR_ADMIN_CIDR }}
         run: |
-          echo "aws_account_id = \"$TF_ACCOUNT_ID\""     > terraform.tfvars
-          echo "environment    = \"$TF_ENVIRONMENT\""   >> terraform.tfvars
-          echo "db_password    = \"$TF_DB_PASSWORD\""   >> terraform.tfvars
+          echo "aws_account_id = \"$TF_ACCOUNT_ID\""      > terraform.tfvars
+          echo "environment    = \"$TF_ENVIRONMENT\""    >> terraform.tfvars
+          echo "db_password    = \"$TF_DB_PASSWORD\""    >> terraform.tfvars
           echo "ec2_public_key = \"$TF_EC2_PUBLIC_KEY\"" >> terraform.tfvars
-          echo "admin_cidr     = \"$TF_ADMIN_CIDR\""    >> terraform.tfvars
+          echo "admin_cidr     = \"$TF_ADMIN_CIDR\""     >> terraform.tfvars
 
       # ------------------------------------------------------------------
-      # Init - toujours execute
+      # Init / Validate
       # ------------------------------------------------------------------
       - name: Terraform init
         run: terraform init -input=false
@@ -101,7 +92,7 @@ jobs:
         run: terraform validate
 
       # ------------------------------------------------------------------
-      # Plan - toujours execute
+      # Plan
       # ------------------------------------------------------------------
       - name: Terraform plan
         id: plan
@@ -118,9 +109,51 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Import - decouverte dynamique des ressources existantes dans le VPC
-      # Execute uniquement si action == apply
-      # Chaque import est tolerant a l echec (|| true) : idempotent.
+      # Cleanup - supprimer RDS + subnet group si dans le mauvais VPC
+      # Un run precedent a peut-etre cree ces ressources dans un autre VPC.
+      # ------------------------------------------------------------------
+      - name: Cleanup ressources dans mauvais VPC
+        if: inputs.action == 'apply'
+        run: |
+          ENV="${{ inputs.environment }}"
+          VPC_ID="vpc-0dcc2ebc834a09cc6"
+          REGION="${{ env.AWS_REGION }}"
+
+          SG_VPC=$(aws rds describe-db-subnet-groups \
+            --db-subnet-group-name "vpp-italia-${ENV}" \
+            --query 'DBSubnetGroups[0].VpcId' \
+            --output text --region "${REGION}" 2>/dev/null || echo "")
+
+          if [ -n "$SG_VPC" ] && [ "$SG_VPC" != "None" ] && [ "$SG_VPC" != "${VPC_ID}" ]; then
+            echo "DB subnet group dans VPC ${SG_VPC} (cible: ${VPC_ID}) — nettoyage necessaire."
+
+            RDS_STATUS=$(aws rds describe-db-instances \
+              --db-instance-identifier "vpp-italia-${ENV}" \
+              --query 'DBInstances[0].DBInstanceStatus' \
+              --output text --region "${REGION}" 2>/dev/null || echo "")
+
+            if [ -n "$RDS_STATUS" ] && [ "$RDS_STATUS" != "None" ]; then
+              echo "Suppression RDS vpp-italia-${ENV} (status: ${RDS_STATUS})..."
+              aws rds delete-db-instance \
+                --db-instance-identifier "vpp-italia-${ENV}" \
+                --skip-final-snapshot \
+                --region "${REGION}" || true
+              echo "Attente suppression RDS (jusqu a 20 min)..."
+              aws rds wait db-instance-deleted \
+                --db-instance-identifier "vpp-italia-${ENV}" \
+                --region "${REGION}" || true
+            fi
+
+            aws rds delete-db-subnet-group \
+              --db-subnet-group-name "vpp-italia-${ENV}" \
+              --region "${REGION}" || true
+            echo "Nettoyage termine."
+          else
+            echo "DB subnet group absent ou deja dans le bon VPC — rien a faire."
+          fi
+
+      # ------------------------------------------------------------------
+      # Import - decouverte dynamique des ressources existantes
       # ------------------------------------------------------------------
       - name: Terraform import ressources existantes
         if: inputs.action == 'apply'
@@ -136,7 +169,6 @@ jobs:
             terraform import -var-file=terraform.tfvars -input=false "$1" "$2" 2>/dev/null || true
           }
 
-          # Retourne l ID ou chaine vide si absent/None
           aws_id() {
             local r
             r=$(aws "$@" --output text --region "${REGION}" 2>/dev/null || echo "")
@@ -176,13 +208,12 @@ jobs:
             --query 'SecurityGroups[0].GroupId')
           [ -n "$SG_RDS" ] && imp aws_security_group.rds "$SG_RDS"
 
-          # Route Table (par tag Name)
+          # Route Table
           RT_ID=$(aws_id ec2 describe-route-tables \
             --filters "Name=vpc-id,Values=${VPC_ID}" "Name=tag:Name,Values=vpp-rt-public-${ENV}" \
             --query 'RouteTables[0].RouteTableId')
           [ -n "$RT_ID" ] && imp aws_route_table.public "$RT_ID"
 
-          # Route Table Association
           if [ -n "$PUB_SN" ] && [ -n "$RT_ID" ]; then
             imp aws_route_table_association.public "${PUB_SN}/${RT_ID}"
           fi
@@ -200,14 +231,15 @@ jobs:
             --query 'Reservations[0].Instances[0].InstanceId')
           [ -n "$EC2_ID" ] && imp aws_instance.api "$EC2_ID"
 
-          # RDS instance
+          # RDS instance + subnet group (dans le bon VPC seulement)
           RDS_ID=$(aws_id rds describe-db-instances \
             --db-instance-identifier "vpp-italia-${ENV}" \
             --query 'DBInstances[0].DBInstanceIdentifier')
           [ -n "$RDS_ID" ] && imp aws_db_instance.timescaledb "$RDS_ID"
 
-          # Ressources identifiees par nom (sans decouverte)
           imp aws_db_subnet_group.main                      "vpp-italia-${ENV}"
+
+          # Ressources nommees
           imp aws_iam_role.ec2_api                          "vpp-ec2-api-${ENV}"
           imp aws_iam_instance_profile.ec2_api              "vpp-ec2-api-${ENV}"
           imp aws_key_pair.deploy                           "vpp-deploy-${ENV}"
@@ -263,7 +295,7 @@ jobs:
           echo "  S3 backups bucket : $S3_BACK"
 
       # ------------------------------------------------------------------
-      # Post-apply : renseigner les parametres SSM
+      # Post-apply : parametres SSM
       # ------------------------------------------------------------------
       - name: Provisionner les parametres SSM
         if: inputs.action == 'apply'
@@ -293,10 +325,10 @@ jobs:
           }
 
           DB_URL="postgresql+asyncpg://vpp:${DB_PASS}@${RDS_EP}/vpp_italia"
-          put_param "database-url"        "$DB_URL"
-          put_param "jwt-secret-key"      "$JWT_KEY"
-          put_param "gme-api-password"    "$GME_PASS"
-          put_param "terna-client-secret" "$TERNA_SC"
+          put_param "database-url"         "$DB_URL"
+          put_param "jwt-secret-key"       "$JWT_KEY"
+          put_param "gme-api-password"     "$GME_PASS"
+          put_param "terna-client-secret"  "$TERNA_SC"
           put_param "huawei-client-secret" "$HW_SC"
 
           echo "Parametres SSM provisionnes." >> $GITHUB_STEP_SUMMARY
@@ -340,11 +372,10 @@ jobs:
             -input=false \
             -auto-approve \
             -no-color
-
           echo "## Infrastructure ${{ inputs.environment }} detruite" >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Nettoyage - toujours execute
+      # Nettoyage
       # ------------------------------------------------------------------
       - name: Nettoyer les fichiers sensibles
         if: always()
