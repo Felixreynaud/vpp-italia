@@ -172,7 +172,7 @@ class GMEPriceClient:
         if not self._lib_available:
             raise RuntimeError("mercati-energetici library not installed")
 
-        from mercati_energetici import MGP  # type: ignore[import]
+        from mercati_energetici import MGP
 
         mgp = MGP()
         # The library returns a list of dicts with keys varying by version;
@@ -185,7 +185,7 @@ class GMEPriceClient:
         if not self._lib_available:
             raise RuntimeError("mercati-energetici library not installed")
 
-        from mercati_energetici import MI  # type: ignore[import]
+        from mercati_energetici import MI
 
         # MI sessions are named MI-A1..MI-A7; the library may use MIA1..MIA7
         session_code = session.replace("-", "")
