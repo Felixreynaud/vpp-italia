@@ -12,7 +12,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from api.dependencies import close_db, init_db
 from api.routers.optimization import router as optimization_router
-from api.routes import batteries, dispatch, markets, metrics
+from api.routes import auth, batteries, dispatch, markets, metrics
 from core.scheduler import MarketScheduler
 
 logger = structlog.get_logger(__name__)
@@ -67,6 +67,7 @@ Instrumentator(
 
 API_PREFIX = "/api/v1"
 
+app.include_router(auth.router, tags=["auth"])
 app.include_router(batteries.router, prefix=API_PREFIX, tags=["batteries"])
 app.include_router(dispatch.router, prefix=API_PREFIX, tags=["dispatch"])
 app.include_router(markets.router, prefix=API_PREFIX, tags=["markets"])
