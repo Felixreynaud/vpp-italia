@@ -90,7 +90,7 @@ class Backtester:
         results = await asyncio.gather(*[_simulate_day(d) for d in days], return_exceptions=True)
 
         for d, result in zip(days, results, strict=False):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning("backtester.day_failed", date=str(d), error=str(result))
                 daily_results.append({"date": str(d), "error": str(result), "pnl_eur": 0.0})
             else:
