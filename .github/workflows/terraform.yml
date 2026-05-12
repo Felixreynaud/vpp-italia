@@ -200,7 +200,14 @@ jobs:
             --query 'Reservations[0].Instances[0].InstanceId')
           [ -n "$EC2_ID" ] && imp aws_instance.api "$EC2_ID"
 
+          # RDS instance
+          RDS_ID=$(aws_id rds describe-db-instances \
+            --db-instance-identifier "vpp-italia-${ENV}" \
+            --query 'DBInstances[0].DBInstanceIdentifier')
+          [ -n "$RDS_ID" ] && imp aws_db_instance.timescaledb "$RDS_ID"
+
           # Ressources identifiees par nom (sans decouverte)
+          imp aws_db_subnet_group.main                      "vpp-italia-${ENV}"
           imp aws_iam_role.ec2_api                          "vpp-ec2-api-${ENV}"
           imp aws_iam_instance_profile.ec2_api              "vpp-ec2-api-${ENV}"
           imp aws_key_pair.deploy                           "vpp-deploy-${ENV}"
@@ -212,18 +219,6 @@ jobs:
           imp aws_secretsmanager_secret.terna_client_secret "vpp-italia/${ENV}/terna-client-secret"
           imp aws_cloudwatch_log_group.api                  "/vpp/api/${ENV}"
           imp aws_db_parameter_group.timescaledb            "vpp-timescaledb-${ENV}"
-
-      # ------------------------------------------------------------------
-      # Supprimer le DB subnet group existant pour laisser Terraform le recreer
-      # ------------------------------------------------------------------
-      - name: Supprimer DB subnet group existant
-        if: inputs.action == 'apply'
-        run: |
-          ENV="${{ inputs.environment }}"
-          aws rds delete-db-subnet-group \
-            --db-subnet-group-name "vpp-italia-${ENV}" \
-            --region "${{ env.AWS_REGION }}" || true
-          sleep 10
 
       # ------------------------------------------------------------------
       # Apply
