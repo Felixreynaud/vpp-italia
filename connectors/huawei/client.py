@@ -82,19 +82,19 @@ class HuaweiBatteryClient:
     # HTTP helpers
     # ------------------------------------------------------------------
 
-    async def _post_third_data(self, path: str, payload: dict) -> Any:
+    async def _post_third_data(self, path: str, payload: dict[str, Any]) -> Any:
         """POST to /thirdData/ — uses xsrf-token header."""
         token = await self._auth.get_token()
         url = self._third_data_url(path)
         return await self._post(url, payload, headers={"xsrf-token": token})
 
-    async def _post_nbi(self, path: str, payload: dict) -> Any:
+    async def _post_nbi(self, path: str, payload: dict[str, Any]) -> Any:
         """POST to /rest/openapi/pvms/ — uses Bearer token."""
         token = await self._auth.get_token()
         url = self._nbi_url(path)
         return await self._post(url, payload, headers={"Authorization": f"Bearer {token}"})
 
-    async def _post(self, url: str, payload: dict, headers: dict) -> Any:
+    async def _post(self, url: str, payload: dict[str, Any], headers: dict[str, str]) -> Any:
         headers = {"Content-Type": "application/json", **headers}
         try:
             async with httpx.AsyncClient(timeout=30.0) as http:
@@ -109,7 +109,7 @@ class HuaweiBatteryClient:
             self._auth.invalidate()
             raise HuaweiAuthError("HTTP 401 from Huawei API — credentials rejected", fail_code=401)
 
-        body: dict = {}
+        body: dict[str, Any] = {}
         try:
             body = resp.json()
         except Exception:
@@ -135,7 +135,7 @@ class HuaweiBatteryClient:
     async def get_plant_list(self) -> list[HuaweiPlant]:
         """Return all plants accessible with the current credentials."""
         data = await self._post_third_data("getStationList", {})
-        raw_list: list[dict] = data if isinstance(data, list) else (data or [])
+        raw_list: list[dict[str, Any]] = data if isinstance(data, list) else (data or [])
         plants = [HuaweiPlant.from_api(r) for r in raw_list]
         logger.info("huawei.plants_fetched", count=len(plants))
         return plants
@@ -150,7 +150,7 @@ class HuaweiBatteryClient:
             "getDevList",
             {"stationCodes": plant_code, "devTypeId": dev_type_id},
         )
-        raw_list: list[dict] = data if isinstance(data, list) else (data or [])
+        raw_list: list[dict[str, Any]] = data if isinstance(data, list) else (data or [])
         devices = [HuaweiDevice.from_api(r, plant_code) for r in raw_list]
         logger.debug("huawei.devices_fetched", plant_code=plant_code, count=len(devices))
         return devices
@@ -180,7 +180,7 @@ class HuaweiBatteryClient:
         if plant_code:
             self._last_realtime_call[plant_code] = time.monotonic()
 
-        raw_list: list[dict] = data if isinstance(data, list) else (data or [])
+        raw_list: list[dict[str, Any]] = data if isinstance(data, list) else (data or [])
         statuses = []
         for entry in raw_list:
             device_id = str(entry.get("devDn") or entry.get("devId") or "")
@@ -198,7 +198,7 @@ class HuaweiBatteryClient:
             {"devIds": plant_code, "devTypeId": BatteryDevType.ESS_SYSTEM},
         )
         self._last_realtime_call[plant_code] = time.monotonic()
-        raw_list: list[dict] = data if isinstance(data, list) else (data or [])
+        raw_list: list[dict[str, Any]] = data if isinstance(data, list) else (data or [])
         return raw_list[0] if raw_list else {}
 
     def _check_rate_limit(self, plant_code: str) -> None:
