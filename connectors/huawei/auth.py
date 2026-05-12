@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 import structlog
@@ -111,7 +112,7 @@ class HuaweiAuthClient:
         return token
 
     @staticmethod
-    def _raise_for_fail_code(body: dict) -> None:
+    def _raise_for_fail_code(body: dict[str, Any]) -> None:
         fail_code = body.get("failCode") or body.get("code")
         if fail_code and int(fail_code) not in (0, 200):
             message = body.get("message") or body.get("msg") or ""

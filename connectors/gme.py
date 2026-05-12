@@ -50,7 +50,7 @@ class GMEClient:
                 },
             )
             resp.raise_for_status()
-            return resp.json()["access_token"]
+            return str(resp.json()["access_token"])
 
     async def submit_offer(self, offer: MarketOfferCreate) -> str:
         """Submit a market offer and return the external offer ID."""
@@ -61,7 +61,7 @@ class GMEClient:
         resp = await client.post(endpoint, json=payload)
         resp.raise_for_status()
 
-        external_id = resp.json()["offerId"]
+        external_id: str = str(resp.json()["offerId"])
         logger.info(
             "gme.offer_submitted",
             market=offer.market,

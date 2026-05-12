@@ -49,7 +49,7 @@ class TernaClient:
                 },
             )
             resp.raise_for_status()
-            return resp.json()["access_token"]
+            return str(resp.json()["access_token"])
 
     async def submit_offer(self, offer: MarketOfferCreate) -> str:
         """Submit a capacity offer to MSD or MB."""
@@ -60,7 +60,7 @@ class TernaClient:
         resp = await client.post(endpoint, json=payload)
         resp.raise_for_status()
 
-        external_id = resp.json()["id"]
+        external_id: str = str(resp.json()["id"])
         logger.info(
             "terna.offer_submitted",
             market=offer.market,
@@ -78,14 +78,15 @@ class TernaClient:
         resp.raise_for_status()
         logger.info("terna.offer_cancelled", external_id=external_id)
 
-    async def get_dispatch_signals(self, delivery_date: str) -> list[dict]:
+    async def get_dispatch_signals(self, delivery_date: str) -> list[dict[str, Any]]:
         """Fetch real-time dispatch signals from Terna for the given date."""
         client = await self._get_client()
         resp = await client.get(
             "/msd/dispatch-signals", params={"date": delivery_date, "upca": self._upca_code}
         )
         resp.raise_for_status()
-        return resp.json()["signals"]
+        signals: list[dict[str, Any]] = resp.json()["signals"]
+        return signals
 
     def _build_payload(self, offer: MarketOfferCreate) -> dict[str, Any]:
         return {

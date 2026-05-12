@@ -172,7 +172,7 @@ class GMEPriceClient:
         if not self._lib_available:
             raise RuntimeError("mercati-energetici library not installed")
 
-        from mercati_energetici import MGP  # type: ignore[import]
+        from mercati_energetici import MGP
 
         mgp = MGP()
         # The library returns a list of dicts with keys varying by version;
@@ -185,7 +185,7 @@ class GMEPriceClient:
         if not self._lib_available:
             raise RuntimeError("mercati-energetici library not installed")
 
-        from mercati_energetici import MI  # type: ignore[import]
+        from mercati_energetici import MI
 
         # MI sessions are named MI-A1..MI-A7; the library may use MIA1..MIA7
         session_code = session.replace("-", "")
@@ -193,7 +193,9 @@ class GMEPriceClient:
         raw: list[dict[str, Any]] = await asyncio.to_thread(mi.get_prices, target)
         return self._parse_raw_prices(raw, market=session, target=target)
 
-    def _parse_raw_prices(self, raw: list[dict[str, Any]], market: str, target: date) -> list[HourlyPrice]:
+    def _parse_raw_prices(
+        self, raw: list[dict[str, Any]], market: str, target: date
+    ) -> list[HourlyPrice]:
         """Normalise the library's raw response into HourlyPrice objects.
 
         The library may return hour as 1-24 (Italian convention) or 0-23.

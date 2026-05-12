@@ -105,7 +105,7 @@ class DispatchPlanCreate(BaseModel):
 
     @field_validator("delivery_date")
     @classmethod
-    def delivery_date_str(cls, v: date) -> str:  # type: ignore[override]
+    def delivery_date_str(cls, v: date) -> str:
         return v.isoformat()
 
 

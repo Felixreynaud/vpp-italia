@@ -72,10 +72,7 @@ def optimize_battery(
     # Decision variables
     p_dis = [pulp.LpVariable(f"p_dis_{t}", lowBound=0, upBound=p_max) for t in range(N_QH)]
     p_ch = [pulp.LpVariable(f"p_ch_{t}", lowBound=0, upBound=p_max) for t in range(N_QH)]
-    soc = [
-        pulp.LpVariable(f"soc_{t}", lowBound=soc_min, upBound=soc_max)
-        for t in range(N_QH + 1)
-    ]
+    soc = [pulp.LpVariable(f"soc_{t}", lowBound=soc_min, upBound=soc_max) for t in range(N_QH + 1)]
 
     # Initial SoC
     prob += soc[0] == battery.initial_soc_percent / 100.0

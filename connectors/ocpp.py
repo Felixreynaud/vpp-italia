@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
-class VPPChargePoint(CP):
+class VPPChargePoint(CP):  # type: ignore[misc]
     """Extended ChargePoint with VPP-specific message handlers."""
 
     @on(Action.Heartbeat)

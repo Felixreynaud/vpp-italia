@@ -32,7 +32,9 @@ SOC_MAX = 90.0
 EFFICIENCY = 0.92
 TEMP_BASE = 25.0
 TEMP_NOISE = 0.3
-REALTIME_RATE_LIMIT_S = 300.0  # 5-minute minimum between real-time calls per plant (Huawei NBI limit)
+REALTIME_RATE_LIMIT_S = (
+    300.0  # 5-minute minimum between real-time calls per plant (Huawei NBI limit)
+)
 
 # LUNA2000 model catalogue: name → (capacity_kwh, max_power_kw)
 LUNA2000_MODELS: dict[str, tuple[float, float]] = {
@@ -79,9 +81,7 @@ class _BatteryState:
                 self.dispatch_switch = DispatchSwitch.STOP
         elif self.current_power_kw < 0:
             # Discharging: SoC decreases
-            delta_soc = (
-                abs(self.current_power_kw) / EFFICIENCY * dt_h / self.capacity_kwh
-            ) * 100.0
+            delta_soc = (abs(self.current_power_kw) / EFFICIENCY * dt_h / self.capacity_kwh) * 100.0
             self.soc = max(SOC_MIN, self.soc - delta_soc)
             if self.soc <= SOC_MIN:
                 self.current_power_kw = 0.0
@@ -177,7 +177,7 @@ class HuaweiSimulator:
     async def get_device_list(self, plant_code: str) -> list[HuaweiDevice]:
         await asyncio.sleep(LATENCY_MS / 1000)
         if plant_code not in self._plants:
-            raise HuaweiAPIError(f"Plant {plant_code} not found", status_code=404)
+            raise HuaweiAPIError(f"Plant {plant_code} not found", http_status=404)
 
         devices = [
             HuaweiDevice(
@@ -204,7 +204,7 @@ class HuaweiSimulator:
         """Return current KPIs for all (or specified) batteries in the plant."""
         await asyncio.sleep(LATENCY_MS / 1000)
         if plant_code not in self._plants:
-            raise HuaweiAPIError(f"Plant {plant_code} not found", status_code=404)
+            raise HuaweiAPIError(f"Plant {plant_code} not found", http_status=404)
 
         results = []
         for bat in self._batteries.values():
@@ -223,7 +223,7 @@ class HuaweiSimulator:
         """Enable remote dispatch for the plant. Returns a request_id."""
         await asyncio.sleep(LATENCY_MS / 1000)
         if plant_code not in self._plants:
-            raise HuaweiAPIError(f"Plant {plant_code} not found", status_code=404)
+            raise HuaweiAPIError(f"Plant {plant_code} not found", http_status=404)
         self._dispatch_mode.add(plant_code)
         return f"MODE_{plant_code}_{uuid.uuid4().hex[:8]}"
 
@@ -252,13 +252,13 @@ class HuaweiSimulator:
         # Validate power
         batteries = [b for b in self._batteries.values() if b.plant_code == plant_code]
         if not batteries:
-            raise HuaweiAPIError(f"No batteries for plant {plant_code}", status_code=404)
+            raise HuaweiAPIError(f"No batteries for plant {plant_code}", http_status=404)
 
         total_max_kw = sum(b.max_power_kw for b in batteries)
         if power_kw > total_max_kw:
             raise HuaweiAPIError(
                 f"Requested power {power_kw} kW exceeds plant capacity {total_max_kw} kW",
-                status_code=422,
+                http_status=422,
             )
 
         request_id = f"TASK_{uuid.uuid4().hex[:12]}"
@@ -508,11 +508,7 @@ class HuaweiSimulator:
             )
         self._last_realtime[plant_code] = now
 
-        return [
-            self._batteries[did].to_status()
-            for did in device_ids
-            if did in self._batteries
-        ]
+        return [self._batteries[did].to_status() for did in device_ids if did in self._batteries]
 
     async def wait_for_task(self, request_id: str, plant_code: str) -> HuaweiDispatchTask:
         """Wait for a dispatch task to complete. Immediately resolves in the simulator."""
