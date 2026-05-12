@@ -33,8 +33,14 @@ variable "environment" {
 # Réseau
 # -----------------------------------------------------------------------------
 
+variable "vpc_id" {
+  description = "ID du VPC existant à utiliser (eu-south-1)"
+  type        = string
+  default     = "vpc-074e13791dd20593a"
+}
+
 variable "vpc_cidr" {
-  description = "CIDR bloc du VPC dédié VPP"
+  description = "CIDR bloc du VPC (non utilisé si vpc_id est fourni)"
   type        = string
   default     = "10.0.0.0/16"
 }

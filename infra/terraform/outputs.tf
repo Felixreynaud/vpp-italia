@@ -65,7 +65,7 @@ output "secrets_manager_arns" {
 
 output "vpc_id" {
   description = "ID du VPC VPP Italia"
-  value       = aws_vpc.main.id
+  value       = data.aws_vpc.main.id
 }
 
 output "cloudwatch_log_group" {
