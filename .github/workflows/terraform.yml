@@ -21,7 +21,6 @@ on:
           - staging
           - production
 
-# Un seul job Terraform a la fois par environnement
 concurrency:
   group: terraform-${{ inputs.environment }}
   cancel-in-progress: false
@@ -109,7 +108,7 @@ jobs:
             --output text --region "${REGION}" 2>/dev/null || echo "")
 
           if [ -n "$SG_VPC" ] && [ "$SG_VPC" != "None" ] && [ "$SG_VPC" != "${VPC_ID}" ]; then
-            echo "DB subnet group dans VPC ${SG_VPC} (cible: ${VPC_ID}) — nettoyage necessaire."
+            echo "DB subnet group dans VPC ${SG_VPC} (cible: ${VPC_ID}) - nettoyage necessaire."
 
             RDS_STATUS=$(aws rds describe-db-instances \
               --db-instance-identifier "vpp-italia-${ENV}" \
@@ -133,7 +132,7 @@ jobs:
               --region "${REGION}" || true
             echo "Nettoyage termine."
           else
-            echo "DB subnet group absent ou deja dans le bon VPC — rien a faire."
+            echo "DB subnet group absent ou deja dans le bon VPC - rien a faire."
           fi
 
       # ------------------------------------------------------------------
@@ -261,7 +260,7 @@ jobs:
           echo "  RDS endpoint      : $RDS_EP"
 
       # ------------------------------------------------------------------
-      # Post-apply : parametres SSM (lus par userdata.sh et vpp-deploy)
+      # Post-apply : parametres SSM
       # ------------------------------------------------------------------
       - name: Provisionner les parametres SSM
         if: inputs.action == 'apply'
@@ -300,44 +299,50 @@ jobs:
           echo "Parametres SSM provisionnes." >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Redemarrer l API via SSM Run Command pour charger les nouveaux secrets
+      # Redemarrer vpp-api via SSM Run Command (non bloquant)
       # ------------------------------------------------------------------
       - name: Redemarrer vpp-api avec les secrets SSM
         if: inputs.action == 'apply'
+        continue-on-error: true
         env:
           EC2_IP: ${{ steps.tf_outputs.outputs.ec2_ip }}
         run: |
           REGION="${{ env.AWS_REGION }}"
-          ENV="${{ inputs.environment }}"
 
-          # Trouver l instance EC2 par IP
           INSTANCE_ID=$(aws ec2 describe-instances \
             --filters "Name=ip-address,Values=${EC2_IP}" \
                       "Name=instance-state-name,Values=running" \
             --query 'Reservations[0].Instances[0].InstanceId' \
             --output text --region "${REGION}" 2>/dev/null || echo "")
 
-          if [ -n "$INSTANCE_ID" ] && [ "$INSTANCE_ID" != "None" ]; then
-            echo "Redemarrage vpp-api sur $INSTANCE_ID..."
-            CMD_ID=$(aws ssm send-command \
-              --instance-ids "$INSTANCE_ID" \
-              --document-name "AWS-RunShellScript" \
-              --parameters 'commands=["systemctl restart vpp-api && sleep 5 && systemctl is-active vpp-api"]' \
-              --region "${REGION}" \
-              --query 'Command.CommandId' --output text)
-            sleep 15
-            aws ssm get-command-invocation \
-              --command-id "$CMD_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --region "${REGION}" \
-              --query '[Status,StandardOutputContent]' \
-              --output text 2>/dev/null || echo "SSM Run Command non disponible (normal au premier boot)"
-          else
-            echo "Instance non encore disponible pour SSM — l API demarrera automatiquement."
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "Instance non trouvee ou non running - redemarrage ignore."
+            exit 0
           fi
 
+          echo "Redemarrage vpp-api sur $INSTANCE_ID..."
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["systemctl restart vpp-api && sleep 3 && systemctl is-active vpp-api"]' \
+            --region "${REGION}" \
+            --query 'Command.CommandId' --output text 2>/dev/null || echo "")
+
+          if [ -z "$CMD_ID" ] || [ "$CMD_ID" = "None" ]; then
+            echo "SSM Run Command non disponible (SSM agent pas encore pret - normal au premier boot)."
+            exit 0
+          fi
+
+          sleep 15
+          aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --region "${REGION}" \
+            --query '[Status,StandardOutputContent]' \
+            --output text 2>/dev/null || echo "Statut SSM non disponible."
+
       # ------------------------------------------------------------------
-      # Smoke test — non bloquant (l EC2 peut encore etre en cours de boot)
+      # Smoke test - non bloquant, 10 min
       # ------------------------------------------------------------------
       - name: Smoke test API
         if: inputs.action == 'apply'
@@ -355,21 +360,16 @@ jobs:
               API_OK=true
               break
             fi
-            echo "  [${i}/60] HTTP $STATUS — nouvelle tentative dans 10s..."
+            echo "  [${i}/60] HTTP $STATUS - nouvelle tentative dans 10s..."
             sleep 10
           done
 
-          echo "" >> $GITHUB_STEP_SUMMARY
           if [ "$API_OK" = "true" ]; then
-            echo "## API opérationnelle" >> $GITHUB_STEP_SUMMARY
-            echo "http://$EC2_IP:8000/docs" >> $GITHUB_STEP_SUMMARY
+            echo "## API operationnelle : http://$EC2_IP:8000/docs" >> $GITHUB_STEP_SUMMARY
           else
-            echo "## ⚠️ API pas encore prête" >> $GITHUB_STEP_SUMMARY
-            echo "L'infra est déployée. L'API démarre en arrière-plan (userdata ~5-10 min)." >> $GITHUB_STEP_SUMMARY
-            echo "Vérifier manuellement : http://$EC2_IP:8000/health" >> $GITHUB_STEP_SUMMARY
-            echo "Logs EC2 : ssh ubuntu@$EC2_IP 'journalctl -u vpp-api -n 50'" >> $GITHUB_STEP_SUMMARY
-            echo "AVERTISSEMENT : API non accessible apres 10 min — verifier les logs EC2"
-            # Pas de exit 1 — l infra est deployee, l API demarrera
+            echo "## Infra deployee - API en cours de demarrage" >> $GITHUB_STEP_SUMMARY
+            echo "Verifier dans quelques minutes : http://$EC2_IP:8000/health" >> $GITHUB_STEP_SUMMARY
+            echo "AVERTISSEMENT : API pas encore prete - verifier logs EC2 si persiste"
           fi
 
       - name: Terraform destroy
