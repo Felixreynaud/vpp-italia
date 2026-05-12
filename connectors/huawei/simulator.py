@@ -32,7 +32,9 @@ SOC_MAX = 90.0
 EFFICIENCY = 0.92
 TEMP_BASE = 25.0
 TEMP_NOISE = 0.3
-REALTIME_RATE_LIMIT_S = 300.0  # 5-minute minimum between real-time calls per plant (Huawei NBI limit)
+REALTIME_RATE_LIMIT_S = (
+    300.0  # 5-minute minimum between real-time calls per plant (Huawei NBI limit)
+)
 
 # LUNA2000 model catalogue: name → (capacity_kwh, max_power_kw)
 LUNA2000_MODELS: dict[str, tuple[float, float]] = {
@@ -79,9 +81,7 @@ class _BatteryState:
                 self.dispatch_switch = DispatchSwitch.STOP
         elif self.current_power_kw < 0:
             # Discharging: SoC decreases
-            delta_soc = (
-                abs(self.current_power_kw) / EFFICIENCY * dt_h / self.capacity_kwh
-            ) * 100.0
+            delta_soc = (abs(self.current_power_kw) / EFFICIENCY * dt_h / self.capacity_kwh) * 100.0
             self.soc = max(SOC_MIN, self.soc - delta_soc)
             if self.soc <= SOC_MIN:
                 self.current_power_kw = 0.0
@@ -508,11 +508,7 @@ class HuaweiSimulator:
             )
         self._last_realtime[plant_code] = now
 
-        return [
-            self._batteries[did].to_status()
-            for did in device_ids
-            if did in self._batteries
-        ]
+        return [self._batteries[did].to_status() for did in device_ids if did in self._batteries]
 
     async def wait_for_task(self, request_id: str, plant_code: str) -> HuaweiDispatchTask:
         """Wait for a dispatch task to complete. Immediately resolves in the simulator."""

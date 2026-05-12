@@ -193,7 +193,9 @@ class GMEPriceClient:
         raw: list[dict[str, Any]] = await asyncio.to_thread(mi.get_prices, target)
         return self._parse_raw_prices(raw, market=session, target=target)
 
-    def _parse_raw_prices(self, raw: list[dict[str, Any]], market: str, target: date) -> list[HourlyPrice]:
+    def _parse_raw_prices(
+        self, raw: list[dict[str, Any]], market: str, target: date
+    ) -> list[HourlyPrice]:
         """Normalise the library's raw response into HourlyPrice objects.
 
         The library may return hour as 1-24 (Italian convention) or 0-23.
