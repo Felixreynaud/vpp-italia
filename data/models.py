@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, relationship
 from sqlalchemy.sql import func
 
 
@@ -70,7 +70,7 @@ class Battery(Base):
     asset_id = Column(String(64), unique=True, nullable=False, comment="Terna UPCA asset code")
     site_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     name = Column(String(128), nullable=False)
-    protocol: Column[BatteryProtocol] = Column(Enum(BatteryProtocol), nullable=False)
+    protocol: Mapped[BatteryProtocol] = Column(Enum(BatteryProtocol), nullable=False)
     host = Column(String(255), nullable=False, comment="IP or hostname for protocol connection")
     port = Column(Integer, nullable=False)
     capacity_kwh = Column(Numeric(10, 2), nullable=False)
@@ -78,7 +78,7 @@ class Battery(Base):
     min_soc_percent = Column(Numeric(5, 2), nullable=False, default=10.0)
     max_soc_percent = Column(Numeric(5, 2), nullable=False, default=90.0)
     ramp_rate_kw_per_min = Column(Numeric(8, 2), nullable=True)
-    state: Column[BatteryState] = Column(
+    state: Mapped[BatteryState] = Column(
         Enum(BatteryState), nullable=False, default=BatteryState.OFFLINE
     )
     is_active = Column(Boolean, nullable=False, default=True)
@@ -109,7 +109,7 @@ class BatteryReading(Base):
     voltage_v = Column(Numeric(8, 2), nullable=True)
     current_a = Column(Numeric(8, 2), nullable=True)
     temperature_c = Column(Numeric(6, 2), nullable=True)
-    state: Column[BatteryState | None] = Column(Enum(BatteryState), nullable=True)
+    state: Mapped[BatteryState | None] = Column(Enum(BatteryState), nullable=True)
     raw = Column(JSON, nullable=True, comment="Full raw payload from connector")
 
     battery = relationship("Battery", back_populates="readings")
@@ -134,7 +134,7 @@ class DispatchPlan(Base):
     power_kw = Column(
         Numeric(10, 2), nullable=False, comment="Target power setpoint (+ discharge, - charge)"
     )
-    source: Column[DispatchSource] = Column(
+    source: Mapped[DispatchSource] = Column(
         Enum(DispatchSource), nullable=False, default=DispatchSource.OPTIMIZER
     )
     optimization_run_id = Column(UUID(as_uuid=True), nullable=True)
@@ -149,7 +149,7 @@ class MarketOffer(Base):
     __tablename__ = "market_offers"
 
     offer_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    market: Column[MarketName] = Column(Enum(MarketName), nullable=False, index=True)
+    market: Mapped[MarketName] = Column(Enum(MarketName), nullable=False, index=True)
     delivery_date = Column(String(10), nullable=False, comment="YYYY-MM-DD in Europe/Rome")
     quarter_hour_start = Column(Integer, nullable=False, comment="First QH covered (0-95)")
     quarter_hour_end = Column(Integer, nullable=False, comment="Last QH covered (inclusive)")
@@ -160,7 +160,7 @@ class MarketOffer(Base):
     external_id = Column(
         String(128), nullable=True, comment="ID returned by GME/Terna after submission"
     )
-    status: Column[OfferStatus] = Column(
+    status: Mapped[OfferStatus] = Column(
         Enum(OfferStatus), nullable=False, default=OfferStatus.DRAFT
     )
     response_payload = Column(JSON, nullable=True)
