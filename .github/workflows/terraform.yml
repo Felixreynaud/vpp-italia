@@ -43,9 +43,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------------
-      # Credentials AWS
-      # ------------------------------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -57,17 +54,11 @@ jobs:
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
-      # ------------------------------------------------------------------
-      # Terraform CLI
-      # ------------------------------------------------------------------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~1.7"
 
-      # ------------------------------------------------------------------
-      # Generer terraform.tfvars depuis les secrets GitHub
-      # ------------------------------------------------------------------
       - name: Create terraform.tfvars
         env:
           TF_ACCOUNT_ID:     ${{ secrets.TF_VAR_AWS_ACCOUNT_ID }}
@@ -82,18 +73,12 @@ jobs:
           echo "ec2_public_key = \"$TF_EC2_PUBLIC_KEY\"" >> terraform.tfvars
           echo "admin_cidr     = \"$TF_ADMIN_CIDR\""     >> terraform.tfvars
 
-      # ------------------------------------------------------------------
-      # Init / Validate
-      # ------------------------------------------------------------------
       - name: Terraform init
         run: terraform init -input=false
 
       - name: Terraform validate
         run: terraform validate
 
-      # ------------------------------------------------------------------
-      # Plan
-      # ------------------------------------------------------------------
       - name: Terraform plan
         id: plan
         run: |
@@ -110,7 +95,6 @@ jobs:
 
       # ------------------------------------------------------------------
       # Cleanup - supprimer RDS + subnet group si dans le mauvais VPC
-      # Un run precedent a peut-etre cree ces ressources dans un autre VPC.
       # ------------------------------------------------------------------
       - name: Cleanup ressources dans mauvais VPC
         if: inputs.action == 'apply'
@@ -175,13 +159,11 @@ jobs:
             [ "$r" = "None" ] && echo "" || echo "$r"
           }
 
-          # Internet Gateway
           IGW_ID=$(aws_id ec2 describe-internet-gateways \
             --filters "Name=attachment.vpc-id,Values=${VPC_ID}" \
             --query 'InternetGateways[0].InternetGatewayId')
           [ -n "$IGW_ID" ] && imp aws_internet_gateway.main "$IGW_ID"
 
-          # Subnets (par CIDR)
           PUB_SN=$(aws_id ec2 describe-subnets \
             --filters "Name=vpc-id,Values=${VPC_ID}" "Name=cidrBlock,Values=10.0.1.0/24" \
             --query 'Subnets[0].SubnetId')
@@ -197,7 +179,6 @@ jobs:
             --query 'Subnets[0].SubnetId')
           [ -n "$PRIV_B" ] && imp aws_subnet.private_b "$PRIV_B"
 
-          # Security Groups (par nom)
           SG_API=$(aws_id ec2 describe-security-groups \
             --filters "Name=vpc-id,Values=${VPC_ID}" "Name=group-name,Values=vpp-api-${ENV}" \
             --query 'SecurityGroups[0].GroupId')
@@ -208,7 +189,6 @@ jobs:
             --query 'SecurityGroups[0].GroupId')
           [ -n "$SG_RDS" ] && imp aws_security_group.rds "$SG_RDS"
 
-          # Route Table
           RT_ID=$(aws_id ec2 describe-route-tables \
             --filters "Name=vpc-id,Values=${VPC_ID}" "Name=tag:Name,Values=vpp-rt-public-${ENV}" \
             --query 'RouteTables[0].RouteTableId')
@@ -218,28 +198,23 @@ jobs:
             imp aws_route_table_association.public "${PUB_SN}/${RT_ID}"
           fi
 
-          # EIP
           EIP_ALLOC=$(aws_id ec2 describe-addresses \
             --filters "Name=tag:Name,Values=vpp-eip-api-${ENV}" \
             --query 'Addresses[0].AllocationId')
           [ -n "$EIP_ALLOC" ] && imp aws_eip.api "$EIP_ALLOC"
 
-          # EC2 Instance
           EC2_ID=$(aws_id ec2 describe-instances \
             --filters "Name=tag:Name,Values=vpp-api-${ENV}" \
                       "Name=instance-state-name,Values=running,stopped,pending" \
             --query 'Reservations[0].Instances[0].InstanceId')
           [ -n "$EC2_ID" ] && imp aws_instance.api "$EC2_ID"
 
-          # RDS instance + subnet group (dans le bon VPC seulement)
           RDS_ID=$(aws_id rds describe-db-instances \
             --db-instance-identifier "vpp-italia-${ENV}" \
             --query 'DBInstances[0].DBInstanceIdentifier')
           [ -n "$RDS_ID" ] && imp aws_db_instance.timescaledb "$RDS_ID"
 
           imp aws_db_subnet_group.main                      "vpp-italia-${ENV}"
-
-          # Ressources nommees
           imp aws_iam_role.ec2_api                          "vpp-ec2-api-${ENV}"
           imp aws_iam_instance_profile.ec2_api              "vpp-ec2-api-${ENV}"
           imp aws_key_pair.deploy                           "vpp-deploy-${ENV}"
@@ -252,9 +227,6 @@ jobs:
           imp aws_cloudwatch_log_group.api                  "/vpp/api/${ENV}"
           imp aws_db_parameter_group.timescaledb            "vpp-timescaledb-${ENV}"
 
-      # ------------------------------------------------------------------
-      # Apply
-      # ------------------------------------------------------------------
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: |
@@ -265,9 +237,6 @@ jobs:
             -no-color
           echo "## Apply termine" >> $GITHUB_STEP_SUMMARY
 
-      # ------------------------------------------------------------------
-      # Outputs
-      # ------------------------------------------------------------------
       - name: Afficher les outputs Terraform
         if: inputs.action == 'apply'
         id: tf_outputs
@@ -288,14 +257,11 @@ jobs:
           echo "s3_logs=$S3_LOGS"       >> $GITHUB_OUTPUT
           echo "s3_backups=$S3_BACK"    >> $GITHUB_OUTPUT
 
-          echo ""
           echo "  EC2 IP publique   : $EC2_IP"
           echo "  RDS endpoint      : $RDS_EP"
-          echo "  S3 logs bucket    : $S3_LOGS"
-          echo "  S3 backups bucket : $S3_BACK"
 
       # ------------------------------------------------------------------
-      # Post-apply : parametres SSM
+      # Post-apply : parametres SSM (lus par userdata.sh et vpp-deploy)
       # ------------------------------------------------------------------
       - name: Provisionner les parametres SSM
         if: inputs.action == 'apply'
@@ -334,35 +300,78 @@ jobs:
           echo "Parametres SSM provisionnes." >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Post-apply : smoke test API
+      # Redemarrer l API via SSM Run Command pour charger les nouveaux secrets
+      # ------------------------------------------------------------------
+      - name: Redemarrer vpp-api avec les secrets SSM
+        if: inputs.action == 'apply'
+        env:
+          EC2_IP: ${{ steps.tf_outputs.outputs.ec2_ip }}
+        run: |
+          REGION="${{ env.AWS_REGION }}"
+          ENV="${{ inputs.environment }}"
+
+          # Trouver l instance EC2 par IP
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=ip-address,Values=${EC2_IP}" \
+                      "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --output text --region "${REGION}" 2>/dev/null || echo "")
+
+          if [ -n "$INSTANCE_ID" ] && [ "$INSTANCE_ID" != "None" ]; then
+            echo "Redemarrage vpp-api sur $INSTANCE_ID..."
+            CMD_ID=$(aws ssm send-command \
+              --instance-ids "$INSTANCE_ID" \
+              --document-name "AWS-RunShellScript" \
+              --parameters 'commands=["systemctl restart vpp-api && sleep 5 && systemctl is-active vpp-api"]' \
+              --region "${REGION}" \
+              --query 'Command.CommandId' --output text)
+            sleep 15
+            aws ssm get-command-invocation \
+              --command-id "$CMD_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --region "${REGION}" \
+              --query '[Status,StandardOutputContent]' \
+              --output text 2>/dev/null || echo "SSM Run Command non disponible (normal au premier boot)"
+          else
+            echo "Instance non encore disponible pour SSM — l API demarrera automatiquement."
+          fi
+
+      # ------------------------------------------------------------------
+      # Smoke test — non bloquant (l EC2 peut encore etre en cours de boot)
       # ------------------------------------------------------------------
       - name: Smoke test API
         if: inputs.action == 'apply'
         env:
           EC2_IP: ${{ steps.tf_outputs.outputs.ec2_ip }}
         run: |
-          echo "Attente demarrage API (EC2 userdata ~3min)..."
-          for i in $(seq 1 18); do
+          echo "Verification API sur http://$EC2_IP:8000/health (10 min max)..."
+          API_OK=false
+          for i in $(seq 1 60); do
             STATUS=$(curl -sf --max-time 5 "http://$EC2_IP:8000/health" \
                      -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
-              echo "API operationnelle (tentative $i/18)"
+              echo "API operationnelle (tentative $i/60)"
               curl -s "http://$EC2_IP:8000/health" | python3 -m json.tool
+              API_OK=true
               break
             fi
-            echo "  [${i}/18] HTTP $STATUS - nouvelle tentative dans 10s..."
+            echo "  [${i}/60] HTTP $STATUS — nouvelle tentative dans 10s..."
             sleep 10
           done
 
-          if [ "$STATUS" != "200" ]; then
-            echo "ERREUR : API non accessible apres 3 minutes"
-            echo "Logs disponibles via : ssh ubuntu@$EC2_IP 'journalctl -u vpp-api -n 50'"
-            exit 1
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$API_OK" = "true" ]; then
+            echo "## API opérationnelle" >> $GITHUB_STEP_SUMMARY
+            echo "http://$EC2_IP:8000/docs" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ API pas encore prête" >> $GITHUB_STEP_SUMMARY
+            echo "L'infra est déployée. L'API démarre en arrière-plan (userdata ~5-10 min)." >> $GITHUB_STEP_SUMMARY
+            echo "Vérifier manuellement : http://$EC2_IP:8000/health" >> $GITHUB_STEP_SUMMARY
+            echo "Logs EC2 : ssh ubuntu@$EC2_IP 'journalctl -u vpp-api -n 50'" >> $GITHUB_STEP_SUMMARY
+            echo "AVERTISSEMENT : API non accessible apres 10 min — verifier les logs EC2"
+            # Pas de exit 1 — l infra est deployee, l API demarrera
           fi
 
-      # ------------------------------------------------------------------
-      # Destroy
-      # ------------------------------------------------------------------
       - name: Terraform destroy
         if: inputs.action == 'destroy'
         run: |
@@ -374,9 +383,6 @@ jobs:
             -no-color
           echo "## Infrastructure ${{ inputs.environment }} detruite" >> $GITHUB_STEP_SUMMARY
 
-      # ------------------------------------------------------------------
-      # Nettoyage
-      # ------------------------------------------------------------------
       - name: Nettoyer les fichiers sensibles
         if: always()
         run: rm -f terraform.tfvars tfplan

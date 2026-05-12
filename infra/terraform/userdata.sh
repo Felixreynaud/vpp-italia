@@ -83,18 +83,24 @@ sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install --upgrade pip -q
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt" -q
 
 # -----------------------------------------------------------------------------
-# Variables d'environnement depuis Secrets Manager
+# Variables d'environnement depuis SSM Parameter Store
+# Les paramètres sont provisionnés par le workflow Terraform après l'apply.
+# Si absents au premier boot, l'API démarre sans DB (mode dégradé).
 # -----------------------------------------------------------------------------
-log "Récupération des secrets AWS Secrets Manager..."
-DB_URL=$(aws secretsmanager get-secret-value \
-    --secret-id "vpp-italia/$ENVIRONMENT/database-url" \
-    --region "$AWS_REGION" \
-    --query SecretString --output text 2>/dev/null || echo "")
+log "Récupération des paramètres SSM..."
+SSM_PREFIX="/vpp-italia/$ENVIRONMENT"
 
-JWT_SECRET=$(aws secretsmanager get-secret-value \
-    --secret-id "vpp-italia/$ENVIRONMENT/jwt-secret-key" \
+DB_URL=$(aws ssm get-parameter \
+    --name "$SSM_PREFIX/database-url" \
+    --with-decryption \
     --region "$AWS_REGION" \
-    --query SecretString --output text 2>/dev/null || echo "changeme-set-in-secrets-manager")
+    --query Parameter.Value --output text 2>/dev/null || echo "")
+
+JWT_SECRET=$(aws ssm get-parameter \
+    --name "$SSM_PREFIX/jwt-secret-key" \
+    --with-decryption \
+    --region "$AWS_REGION" \
+    --query Parameter.Value --output text 2>/dev/null || echo "changeme-set-in-ssm")
 
 cat > "$APP_DIR/.env" <<ENV
 APP_ENV=$ENVIRONMENT
