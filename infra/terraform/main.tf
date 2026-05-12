@@ -39,20 +39,23 @@ data "aws_ami" "ubuntu" {
 }
 
 # =============================================================================
-# VPC - reseau dedie VPP Italia
+# VPC - reseau dedie VPP Italia (VPC existant reutilise)
 # =============================================================================
 
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
+data "aws_vpc" "main" {
+  id = var.vpc_id
+}
 
-  tags = { Name = "vpp-italia-${var.environment}" }
+data "aws_internet_gateway" "main" {
+  filter {
+    name   = "attachment.vpc-id"
+    values = [data.aws_vpc.main.id]
+  }
 }
 
 # Sous-reseau public - EC2 API (acces Internet entrant)
 resource "aws_subnet" "public" {
-  vpc_id                  = aws_vpc.main.id
+  vpc_id                  = data.aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr
   availability_zone       = "${var.aws_region}a"
   map_public_ip_on_launch = true
@@ -62,7 +65,7 @@ resource "aws_subnet" "public" {
 
 # Sous-reseau prive - RDS (aucun acces Internet direct)
 resource "aws_subnet" "private_a" {
-  vpc_id            = aws_vpc.main.id
+  vpc_id            = data.aws_vpc.main.id
   cidr_block        = var.private_subnet_cidr_a
   availability_zone = "${var.aws_region}a"
 
@@ -70,26 +73,20 @@ resource "aws_subnet" "private_a" {
 }
 
 resource "aws_subnet" "private_b" {
-  vpc_id            = aws_vpc.main.id
+  vpc_id            = data.aws_vpc.main.id
   cidr_block        = var.private_subnet_cidr_b
   availability_zone = "${var.aws_region}b"
 
   tags = { Name = "vpp-private-b-${var.environment}" }
 }
 
-# Internet Gateway - sortie Internet pour le sous-reseau public
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-  tags   = { Name = "vpp-igw-${var.environment}" }
-}
-
 # Table de routage publique
 resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.main.id
 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
+    gateway_id = data.aws_internet_gateway.main.id
   }
 
   tags = { Name = "vpp-rt-public-${var.environment}" }
@@ -108,7 +105,7 @@ resource "aws_route_table_association" "public" {
 resource "aws_security_group" "api" {
   name        = "vpp-api-${var.environment}"
   description = "FastAPI VPP - port 8000 public, SSH admin"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
 
   ingress {
     description = "API FastAPI"
@@ -140,7 +137,7 @@ resource "aws_security_group" "api" {
 resource "aws_security_group" "rds" {
   name        = "vpp-rds-${var.environment}"
   description = "TimescaleDB - accessible uniquement depuis l EC2 API"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
 
   ingress {
     description     = "PostgreSQL depuis API"
