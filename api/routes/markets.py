@@ -49,6 +49,7 @@ async def submit_offer(
     from connectors.terna import TernaClient
     from data.models import MarketOffer
 
+    client: GMEClient | TernaClient
     if payload.market in ("MGP", "MI", "MSD_GME"):
         client = GMEClient()
     elif payload.market in ("MSD", "MB"):
@@ -91,22 +92,24 @@ async def cancel_offer(
     """Cancel a previously submitted offer (if the market window allows it)."""
     from connectors.gme import GMEClient
     from connectors.terna import TernaClient
-    from data.models import MarketOffer
+    from data.models import MarketOffer, OfferStatus
 
     offer = await db.get(MarketOffer, offer_id)
     if not offer:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offer not found")
 
-    if offer.status not in ("submitted", "accepted"):
+    if offer.status not in (OfferStatus.SUBMITTED, OfferStatus.ACCEPTED):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot cancel offer in status: {offer.status}",
         )
 
-    client = GMEClient() if offer.market in ("MGP", "MI", "MSD_GME") else TernaClient()
+    client: GMEClient | TernaClient = (
+        GMEClient() if offer.market in ("MGP", "MI", "MSD_GME") else TernaClient()
+    )
 
-    await client.cancel_offer(offer.external_id)
-    offer.status = "cancelled"
+    await client.cancel_offer(str(offer.external_id))
+    offer.status = OfferStatus.CANCELLED
     await db.flush()
     await db.refresh(offer)
     return MarketOfferResponse.model_validate(offer)
