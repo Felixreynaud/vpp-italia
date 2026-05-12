@@ -26,7 +26,7 @@ jobs:
           cache: pip
 
       - name: Installer les outils de qualité
-        run: pip install ruff mypy types-python-jose sqlalchemy[mypy]
+        run: pip install ruff mypy types-python-jose sqlalchemy[mypy] pydantic
 
       - name: Ruff — vérification style
         run: ruff check .
