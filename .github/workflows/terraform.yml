@@ -101,9 +101,7 @@ jobs:
         run: terraform validate
 
       # ------------------------------------------------------------------
-      # Plan - toujours execute (affiche en resume du job)
-      # Pour action == apply, le plan est re-execute dans le step apply
-      # afin que l etat soit toujours frais (apres les imports).
+      # Plan - toujours execute
       # ------------------------------------------------------------------
       - name: Terraform plan
         id: plan
@@ -120,7 +118,7 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Import - ressources existantes a integrer dans le state
+      # Import - decouverte dynamique des ressources existantes dans le VPC
       # Execute uniquement si action == apply
       # Chaque import est tolerant a l echec (|| true) : idempotent.
       # ------------------------------------------------------------------
@@ -131,12 +129,78 @@ jobs:
         run: |
           ENV="${{ inputs.environment }}"
           ACCOUNT_ID="${TF_VAR_AWS_ACCOUNT_ID}"
+          VPC_ID="vpc-0dcc2ebc834a09cc6"
+          REGION="${{ env.AWS_REGION }}"
 
           imp() {
-            terraform import -var-file=terraform.tfvars -input=false "$1" "$2" || true
+            terraform import -var-file=terraform.tfvars -input=false "$1" "$2" 2>/dev/null || true
           }
 
-          imp aws_vpc.main                                  "vpc-074e13791dd20593a"
+          # Retourne l ID ou chaine vide si absent/None
+          aws_id() {
+            local r
+            r=$(aws "$@" --output text --region "${REGION}" 2>/dev/null || echo "")
+            [ "$r" = "None" ] && echo "" || echo "$r"
+          }
+
+          # Internet Gateway
+          IGW_ID=$(aws_id ec2 describe-internet-gateways \
+            --filters "Name=attachment.vpc-id,Values=${VPC_ID}" \
+            --query 'InternetGateways[0].InternetGatewayId')
+          [ -n "$IGW_ID" ] && imp aws_internet_gateway.main "$IGW_ID"
+
+          # Subnets (par CIDR)
+          PUB_SN=$(aws_id ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=cidrBlock,Values=10.0.1.0/24" \
+            --query 'Subnets[0].SubnetId')
+          [ -n "$PUB_SN" ] && imp aws_subnet.public "$PUB_SN"
+
+          PRIV_A=$(aws_id ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=cidrBlock,Values=10.0.10.0/24" \
+            --query 'Subnets[0].SubnetId')
+          [ -n "$PRIV_A" ] && imp aws_subnet.private_a "$PRIV_A"
+
+          PRIV_B=$(aws_id ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=cidrBlock,Values=10.0.11.0/24" \
+            --query 'Subnets[0].SubnetId')
+          [ -n "$PRIV_B" ] && imp aws_subnet.private_b "$PRIV_B"
+
+          # Security Groups (par nom)
+          SG_API=$(aws_id ec2 describe-security-groups \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=group-name,Values=vpp-api-${ENV}" \
+            --query 'SecurityGroups[0].GroupId')
+          [ -n "$SG_API" ] && imp aws_security_group.api "$SG_API"
+
+          SG_RDS=$(aws_id ec2 describe-security-groups \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=group-name,Values=vpp-rds-${ENV}" \
+            --query 'SecurityGroups[0].GroupId')
+          [ -n "$SG_RDS" ] && imp aws_security_group.rds "$SG_RDS"
+
+          # Route Table (par tag Name)
+          RT_ID=$(aws_id ec2 describe-route-tables \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=tag:Name,Values=vpp-rt-public-${ENV}" \
+            --query 'RouteTables[0].RouteTableId')
+          [ -n "$RT_ID" ] && imp aws_route_table.public "$RT_ID"
+
+          # Route Table Association
+          if [ -n "$PUB_SN" ] && [ -n "$RT_ID" ]; then
+            imp aws_route_table_association.public "${PUB_SN}/${RT_ID}"
+          fi
+
+          # EIP
+          EIP_ALLOC=$(aws_id ec2 describe-addresses \
+            --filters "Name=tag:Name,Values=vpp-eip-api-${ENV}" \
+            --query 'Addresses[0].AllocationId')
+          [ -n "$EIP_ALLOC" ] && imp aws_eip.api "$EIP_ALLOC"
+
+          # EC2 Instance
+          EC2_ID=$(aws_id ec2 describe-instances \
+            --filters "Name=tag:Name,Values=vpp-api-${ENV}" \
+                      "Name=instance-state-name,Values=running,stopped,pending" \
+            --query 'Reservations[0].Instances[0].InstanceId')
+          [ -n "$EC2_ID" ] && imp aws_instance.api "$EC2_ID"
+
+          # Ressources identifiees par nom (sans decouverte)
           imp aws_iam_role.ec2_api                          "vpp-ec2-api-${ENV}"
           imp aws_iam_instance_profile.ec2_api              "vpp-ec2-api-${ENV}"
           imp aws_key_pair.deploy                           "vpp-deploy-${ENV}"
@@ -151,7 +215,6 @@ jobs:
 
       # ------------------------------------------------------------------
       # Supprimer le DB subnet group existant pour laisser Terraform le recreer
-      # (le subnet group existant peut pointer sur des subnets differents)
       # ------------------------------------------------------------------
       - name: Supprimer DB subnet group existant
         if: inputs.action == 'apply'
@@ -163,8 +226,7 @@ jobs:
           sleep 10
 
       # ------------------------------------------------------------------
-      # Apply - uniquement si action == apply
-      # Plan + apply dans la meme execution pour garantir un etat frais.
+      # Apply
       # ------------------------------------------------------------------
       - name: Terraform apply
         if: inputs.action == 'apply'
@@ -177,7 +239,7 @@ jobs:
           echo "## Apply termine" >> $GITHUB_STEP_SUMMARY
 
       # ------------------------------------------------------------------
-      # Outputs - affiches apres apply
+      # Outputs
       # ------------------------------------------------------------------
       - name: Afficher les outputs Terraform
         if: inputs.action == 'apply'
@@ -272,7 +334,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
-      # Destroy - uniquement si action == destroy
+      # Destroy
       # ------------------------------------------------------------------
       - name: Terraform destroy
         if: inputs.action == 'destroy'
