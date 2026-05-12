@@ -178,3 +178,70 @@ async def test_wait_until_next_adds_day_when_past_target() -> None:
     assert len(slept) == 1
     assert slept[0] > 0
     assert slept[0] > 60 * 60 * 20
+
+
+# ---------------------------------------------------------------------------
+# Internal loop methods — single iteration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_mgp_scheduler_one_iteration() -> None:
+    scheduler = MarketScheduler()
+    scheduler._running = True
+    mock_run = AsyncMock(return_value="task-id")
+
+    async def _stop_after(*_: object, **__: object) -> None:
+        scheduler._running = False
+
+    with (
+        patch.object(MarketScheduler, "_wait_until_next", _stop_after),
+        patch("core.optimizer.run_optimization_async", mock_run),
+    ):
+        await scheduler._run_mgp_scheduler()
+
+    mock_run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_mgp_scheduler_handles_optimizer_error() -> None:
+    scheduler = MarketScheduler()
+    scheduler._running = True
+
+    async def _stop_after(*_: object, **__: object) -> None:
+        scheduler._running = False
+
+    with (
+        patch.object(MarketScheduler, "_wait_until_next", _stop_after),
+        patch("core.optimizer.run_optimization_async", AsyncMock(side_effect=RuntimeError("err"))),
+    ):
+        await scheduler._run_mgp_scheduler()
+
+
+@pytest.mark.asyncio
+async def test_run_msd_scheduler_one_iteration() -> None:
+    scheduler = MarketScheduler()
+    scheduler._running = True
+
+    async def _stop_after(*_: object, **__: object) -> None:
+        scheduler._running = False
+
+    with patch.object(MarketScheduler, "_wait_until_next", _stop_after):
+        await scheduler._run_msd_scheduler()
+
+
+@pytest.mark.asyncio
+async def test_run_telemetry_watchdog_one_iteration() -> None:
+    scheduler = MarketScheduler()
+    scheduler._running = True
+    calls = 0
+
+    async def _mock_sleep(_: float) -> None:
+        nonlocal calls
+        calls += 1
+        scheduler._running = False
+
+    with patch("core.scheduler.asyncio.sleep", _mock_sleep):
+        await scheduler._run_telemetry_watchdog()
+
+    assert calls == 1
