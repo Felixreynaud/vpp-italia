@@ -30,8 +30,12 @@ async def test_login_token_contains_sub_and_roles(client) -> None:
     assert resp.status_code == 200
     token = resp.json()["access_token"]
 
-    with patch.dict(os.environ, {"JWT_SECRET_KEY": "dev-secret-change-in-prod-openssl-rand-hex-32"}):
-        payload = jwt.decode(token, "dev-secret-change-in-prod-openssl-rand-hex-32", algorithms=["HS256"])
+    with patch.dict(
+        os.environ, {"JWT_SECRET_KEY": "dev-secret-change-in-prod-openssl-rand-hex-32"}
+    ):
+        payload = jwt.decode(
+            token, "dev-secret-change-in-prod-openssl-rand-hex-32", algorithms=["HS256"]
+        )
 
     assert payload["sub"] == "admin"
     assert "admin" in payload["roles"]
