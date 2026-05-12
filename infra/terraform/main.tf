@@ -46,11 +46,10 @@ data "aws_vpc" "main" {
   id = var.vpc_id
 }
 
-data "aws_internet_gateway" "main" {
-  filter {
-    name   = "attachment.vpc-id"
-    values = [data.aws_vpc.main.id]
-  }
+# Internet Gateway — cree s il n existe pas encore dans le VPC
+resource "aws_internet_gateway" "main" {
+  vpc_id = data.aws_vpc.main.id
+  tags   = { Name = "vpp-igw-${var.environment}" }
 }
 
 # Sous-reseau public - EC2 API (acces Internet entrant)
@@ -86,7 +85,7 @@ resource "aws_route_table" "public" {
 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = data.aws_internet_gateway.main.id
+    gateway_id = aws_internet_gateway.main.id
   }
 
   tags = { Name = "vpp-rt-public-${var.environment}" }

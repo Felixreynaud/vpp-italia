@@ -36,7 +36,7 @@ variable "environment" {
 variable "vpc_id" {
   description = "ID du VPC existant à utiliser (eu-south-1)"
   type        = string
-  default     = "vpc-074e13791dd20593a"
+  default     = "vpc-0dcc2ebc834a09cc6"
 }
 
 variable "vpc_cidr" {
