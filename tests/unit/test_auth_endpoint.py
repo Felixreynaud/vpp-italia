@@ -8,6 +8,8 @@ from unittest.mock import patch
 import pytest
 from jose import jwt
 
+_JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "dev-secret-change-in-prod-openssl-rand-hex-32")
+
 
 @pytest.mark.asyncio
 async def test_login_dev_mode_returns_token(client) -> None:
@@ -29,14 +31,7 @@ async def test_login_token_contains_sub_and_roles(client) -> None:
     )
     assert resp.status_code == 200
     token = resp.json()["access_token"]
-
-    with patch.dict(
-        os.environ, {"JWT_SECRET_KEY": "dev-secret-change-in-prod-openssl-rand-hex-32"}
-    ):
-        payload = jwt.decode(
-            token, "dev-secret-change-in-prod-openssl-rand-hex-32", algorithms=["HS256"]
-        )
-
+    payload = jwt.decode(token, _JWT_SECRET, algorithms=["HS256"])
     assert payload["sub"] == "admin"
     assert "admin" in payload["roles"]
 
@@ -49,11 +44,7 @@ async def test_login_operator_gets_operator_role(client) -> None:
     )
     assert resp.status_code == 200
     token = resp.json()["access_token"]
-    payload = jwt.decode(
-        token,
-        "dev-secret-change-in-prod-openssl-rand-hex-32",
-        algorithms=["HS256"],
-    )
+    payload = jwt.decode(token, _JWT_SECRET, algorithms=["HS256"])
     assert payload["roles"] == ["operator"]
 
 
