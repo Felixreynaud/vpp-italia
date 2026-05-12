@@ -36,7 +36,7 @@ async def health_check() -> dict[str, Any]:
     db_ok = False
 
     try:
-        from api.dependencies import _session_factory  # type: ignore[attr-defined]
+        from api.dependencies import _session_factory
 
         if _session_factory:
             from sqlalchemy import func, select
@@ -90,7 +90,7 @@ async def battery_metrics() -> Response:
     try:
         from sqlalchemy import select, text
 
-        from api.dependencies import _session_factory  # type: ignore[attr-defined]
+        from api.dependencies import _session_factory
         from data.models import Battery, BatteryState
 
         if _session_factory is None:
@@ -198,7 +198,7 @@ async def pnl_metrics() -> dict[str, Any]:
     try:
         from sqlalchemy import text
 
-        from api.dependencies import _session_factory  # type: ignore[attr-defined]
+        from api.dependencies import _session_factory
 
         if _session_factory:
             async with _session_factory() as session:
@@ -227,7 +227,7 @@ async def pnl_metrics() -> dict[str, Any]:
                     month_eur = float(row.month_eur or 0)
 
                 # Projected from the dispatch scheduler if available
-                from api.main import _scheduler  # type: ignore[attr-defined]
+                from api.main import _scheduler
 
                 if _scheduler and hasattr(_scheduler, "get_today_pnl"):
                     pnl_data = _scheduler.get_today_pnl()
