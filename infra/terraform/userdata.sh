@@ -28,7 +28,7 @@ apt-get install -y -qq \
     jq \
     awscli \
     nginx \
-    postgresql-client-15 \
+    postgresql-client \
     libpq-dev \
     gcc \
     build-essential
