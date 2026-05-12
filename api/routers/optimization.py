@@ -10,7 +10,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,9 +109,9 @@ async def optimize_autoconsommation(
 @router.post("/arbitrage")
 async def optimize_arbitrage(
     site_id: UUID,
-    prix_mgp: list[float],
     db: DbSession,
     _user: CurrentUser,
+    prix_mgp: Annotated[list[float], Body()],
     mode: Annotated[str, Query()] = "standard",
 ) -> dict[str, Any]:
     """Run MGP arbitrage optimisation with CVaR/Sharpe risk metrics."""
@@ -147,9 +147,9 @@ async def optimize_arbitrage(
 @router.post("/stochastique")
 async def optimize_stochastique(
     site_id: UUID,
-    prix_mgp_base: list[float],
     db: DbSession,
     _user: CurrentUser,
+    prix_mgp_base: Annotated[list[float], Body()],
     incertitude_pct: Annotated[float, Query(ge=0.0, le=100.0)] = 20.0,
     n_scenarios: Annotated[int, Query(ge=5, le=200)] = 20,
 ) -> dict[str, Any]:
