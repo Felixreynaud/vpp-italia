@@ -32,25 +32,20 @@ class LoginResponse(BaseModel):
 async def login(req: LoginRequest) -> dict[str, Any]:
     """Issue a JWT for the given credentials.
 
-    In development (APP_ENV != production) any username/password in _DEV_USERS
-    is accepted.  In production, replace this with a real user-store lookup.
+    All environments validate the credentials against _DEV_USERS. In production
+    this dict should be replaced by a real user-store lookup (DB + bcrypt).
     """
-    app_env = os.getenv("APP_ENV", "development")
     secret = os.environ["JWT_SECRET_KEY"]
     algorithm = os.getenv("JWT_ALGORITHM", "HS256")
 
-    if app_env != "production":
-        # Dev shortcut: accept known dev users or any credentials
-        roles = ["admin"] if req.username == "admin" else ["operator"]
-    else:
-        expected = _DEV_USERS.get(req.username)
-        if expected is None or expected != req.password:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        roles = ["admin"] if req.username == "admin" else ["operator"]
+    expected = _DEV_USERS.get(req.username)
+    if expected is None or expected != req.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    roles = ["admin"] if req.username == "admin" else ["operator"]
 
     expires = datetime.now(UTC) + timedelta(hours=8)
     payload = {
