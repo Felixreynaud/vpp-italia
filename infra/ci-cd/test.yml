@@ -112,7 +112,9 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Lancer les tests d'intégration
-        run: pytest tests/integration/ -v -m integration --timeout=60
+        # Exit code 5 = "no tests collected" : toléré tant que tests/integration/ ne contient
+        # pas encore de tests marqués @pytest.mark.integration.
+        run: pytest tests/integration/ -v -m integration --timeout=60 || [ $? -eq 5 ]
         env:
           DATABASE_URL: postgresql+asyncpg://vpp:testpassword@localhost:5432/vpp_test
           ALEMBIC_DATABASE_URL: postgresql://vpp:testpassword@localhost:5432/vpp_test

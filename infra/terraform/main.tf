@@ -197,7 +197,7 @@ resource "aws_iam_role_policy" "ec2_api_s3" {
       },
       {
         Effect   = "Allow"
-        Action   = ["ssm:GetParameter", "ssm:GetParametersByPath"]
+        Action   = ["ssm:GetParameter", "ssm:GetParametersByPath", "ssm:PutParameter"]
         Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/vpp-italia/${var.environment}/*"
       },
       {

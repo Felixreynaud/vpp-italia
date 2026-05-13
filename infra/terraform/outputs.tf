@@ -72,3 +72,24 @@ output "cloudwatch_log_group" {
   description = "Groupe de logs CloudWatch pour l'API"
   value       = aws_cloudwatch_log_group.api.name
 }
+
+# -----------------------------------------------------------------------------
+# Cloudflare Tunnel — URL publique HTTPS (générée à chaque boot par cloudflared)
+# -----------------------------------------------------------------------------
+
+output "cloudflare_tunnel_url_command" {
+  description = "Commande à lancer pour récupérer l'URL publique HTTPS du tunnel Cloudflare (servie via Nginx -> frontend + /api/ + /grafana/)."
+  value       = "aws ssm get-parameter --name /vpp-italia/${var.environment}/cloudflare-tunnel-url --region ${var.aws_region} --query Parameter.Value --output text"
+}
+
+output "post_deploy_urls_hint" {
+  description = "Récap : récupérer l'URL Cloudflare puis ouvrir frontend / API / Grafana"
+  value = join("\n", [
+    "1) URL publique HTTPS (à attendre ~3-5 min après apply, le temps que userdata finisse) :",
+    "     aws ssm get-parameter --name /vpp-italia/${var.environment}/cloudflare-tunnel-url --region ${var.aws_region} --query Parameter.Value --output text",
+    "2) Une fois récupérée (ex: https://xyz-abc.trycloudflare.com), ouvrir dans le navigateur :",
+    "     <URL>/            -> Frontend React",
+    "     <URL>/api/v1/...  -> API FastAPI",
+    "     <URL>/grafana/    -> Grafana (login admin/admin au premier accès)",
+  ])
+}
