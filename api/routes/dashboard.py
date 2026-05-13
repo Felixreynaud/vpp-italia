@@ -77,10 +77,13 @@ async def fleet_metrics(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
     # Available energy = sum(capacity * soc / 100) — quick proxy in MWh
     energie_disponible_mwh = round(total_capacity_kwh * soc_moyen / 100 / 1000, 2)
 
+    # Convention exposée au frontend : positive = décharge (injection réseau),
+    # négative = charge (soutirage). C'est l'inverse de la convention Huawei
+    # stockée dans battery_readings, donc on inverse le signe ici.
     return {
         "data": {
             "soc_moyen": round(soc_moyen, 1),
-            "puissance_totale_kw": round(puissance_totale_kw, 1),
+            "puissance_totale_kw": round(-puissance_totale_kw, 1),
             "batteries_actives": batteries_actives,
             "batteries_total": batteries_total,
             "energie_disponible_mwh": energie_disponible_mwh,

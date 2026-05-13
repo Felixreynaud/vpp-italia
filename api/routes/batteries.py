@@ -120,7 +120,10 @@ async def list_batteries(
         item = BatteryResponse.model_validate(b)
         if r is not None:
             item.soc_percent = float(r.soc_percent) if r.soc_percent is not None else None
-            item.power_kw = float(r.power_kw) if r.power_kw is not None else None
+            # Convention exposée au frontend : positive = décharge, négative = charge.
+            # On inverse le signe par rapport à battery_readings (qui stocke en
+            # convention Huawei : positive = charge).
+            item.power_kw = -float(r.power_kw) if r.power_kw is not None else None
             item.voltage_v = float(r.voltage_v) if r.voltage_v is not None else None
             item.current_a = float(r.current_a) if r.current_a is not None else None
             item.temperature_c = (
@@ -440,7 +443,8 @@ async def test_connection(
     return {
         "ok": True,
         "soc_percent": s.soc,
-        "power_kw": s.power_kw,
+        # Convention business pour le frontend : positive = décharge.
+        "power_kw": -s.power_kw if s.power_kw is not None else None,
         "voltage_v": s.voltage_v,
         "temperature_c": s.temperature_c,
         "soh": s.soh,
