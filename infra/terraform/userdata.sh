@@ -336,8 +336,11 @@ server {
     }
 
     # ---- Grafana ----
+    # Pas de slash final sur proxy_pass : on transmet l'URL complète /grafana/...
+    # à Grafana (qui a serve_from_sub_path=true). Sinon Nginx strippe /grafana/
+    # et Grafana renvoie une redirection vers /grafana/, créant une boucle.
     location /grafana/ {
-        proxy_pass http://127.0.0.1:3000/;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -346,7 +349,7 @@ server {
     }
 
     location /grafana/api/live/ {
-        proxy_pass http://127.0.0.1:3000/api/live/;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
