@@ -115,6 +115,41 @@ ENV
 chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"
 
+# =============================================================================
+# Huawei FusionSolar simulator (service systemd, port local 9999)
+# =============================================================================
+log "Configuration du service systemd huawei-simulator..."
+cat > /etc/systemd/system/huawei-simulator.service <<SIMSVC
+[Unit]
+Description=Huawei FusionSolar NBI simulator (VPP Italia)
+After=network.target
+
+[Service]
+Type=simple
+User=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment="HUAWEI_SIM_HOST=127.0.0.1"
+Environment="HUAWEI_SIM_PORT=9999"
+Environment="HUAWEI_SIM_NUM_BATTERIES=20"
+Environment="HUAWEI_SIM_RATE_LIMIT_S=1.0"
+ExecStart=$APP_DIR/.venv/bin/python -m connectors.huawei.sim_server
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/huawei-simulator.log
+StandardError=append:/var/log/huawei-simulator.log
+
+[Install]
+WantedBy=multi-user.target
+SIMSVC
+
+touch /var/log/huawei-simulator.log
+chown "$APP_USER:$APP_USER" /var/log/huawei-simulator.log
+
+systemctl daemon-reload
+systemctl enable huawei-simulator
+systemctl start huawei-simulator
+
 # -----------------------------------------------------------------------------
 # Service systemd
 # -----------------------------------------------------------------------------
