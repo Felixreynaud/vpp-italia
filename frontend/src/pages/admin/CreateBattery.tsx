@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Wrench,
   Shield,
+  Link2,
 } from 'lucide-react';
 import {
   createBattery,
@@ -23,6 +24,7 @@ import {
 import type {
   BatteryMetadata,
   BatteryModelInfo,
+  BatteryProtocol,
   CreateBatteryRequest,
   GmeZone,
 } from '../../api/types';
@@ -40,10 +42,29 @@ interface FormState {
   min_soc_percent: number;
   max_soc_percent: number;
   ramp_rate_kw_per_min: number | null;
-  // Connection
-  endpoint_url: string;
-  client_id: string;
-  client_secret: string;
+  // Connection — type drives which sub-fields apply
+  connection_type: 'huawei_fusion_solar' | 'modbus_tcp' | 'ocpp_2_0_1' | 'rest_generic';
+  // Huawei FusionSolar (REST cloud or local simulator)
+  huawei_endpoint_url: string;
+  huawei_client_id: string;
+  huawei_client_secret: string;
+  huawei_plant_code_override: string; // empty = auto-derive from asset_id
+  // Modbus TCP (local LAN)
+  modbus_host: string;
+  modbus_port: number;
+  modbus_unit_id: number;
+  modbus_timeout_s: number;
+  // OCPP 2.0.1 (charging station)
+  ocpp_ws_url: string;
+  ocpp_charge_point_id: string;
+  ocpp_auth_token: string;
+  ocpp_heartbeat_interval_s: number;
+  // REST generic
+  rest_base_url: string;
+  rest_auth_scheme: 'bearer' | 'api_key' | 'basic';
+  rest_credential: string; // token, api key, or "user:pass" for basic
+  rest_extra_headers: string; // raw JSON, optional
+  poll_interval_seconds: number;
   // 1. Identity
   model: string;
   serial_number: string;
@@ -117,9 +138,24 @@ const DEFAULT_STATE: FormState = {
   min_soc_percent: 10,
   max_soc_percent: 90,
   ramp_rate_kw_per_min: null,
-  endpoint_url: 'http://127.0.0.1:9999',
-  client_id: 'sim',
-  client_secret: 'sim',
+  connection_type: 'huawei_fusion_solar',
+  huawei_endpoint_url: 'http://127.0.0.1:9999',
+  huawei_client_id: 'sim',
+  huawei_client_secret: 'sim',
+  huawei_plant_code_override: '',
+  modbus_host: '192.168.1.100',
+  modbus_port: 502,
+  modbus_unit_id: 1,
+  modbus_timeout_s: 5,
+  ocpp_ws_url: 'wss://ocpp.example.com/csms',
+  ocpp_charge_point_id: '',
+  ocpp_auth_token: '',
+  ocpp_heartbeat_interval_s: 60,
+  rest_base_url: '',
+  rest_auth_scheme: 'bearer',
+  rest_credential: '',
+  rest_extra_headers: '',
+  poll_interval_seconds: 10,
   model: '',
   serial_number: '',
   manufacturer: 'Huawei',
@@ -174,6 +210,104 @@ const DEFAULT_STATE: FormState = {
   data_retention_audit_url: '',
 };
 
+// Parse a "host:port" pair out of a URL, falling back to sensible defaults
+function splitUrl(url: string, defaultPort: number): { host: string; port: number } {
+  try {
+    const u = new URL(url);
+    const port = u.port ? parseInt(u.port, 10) : u.protocol === 'https:' || u.protocol === 'wss:' ? 443 : defaultPort;
+    return { host: u.hostname, port };
+  } catch {
+    return { host: '127.0.0.1', port: defaultPort };
+  }
+}
+
+// Build the protocol-specific connection block from the form
+function buildConnection(form: FormState, plantCode: string) {
+  switch (form.connection_type) {
+    case 'huawei_fusion_solar': {
+      const { host, port } = splitUrl(form.huawei_endpoint_url, 9999);
+      return {
+        protocol: 'rest' as BatteryProtocol,
+        subtype: 'huawei_fusion_solar',
+        host,
+        port,
+        endpoint_url: form.huawei_endpoint_url,
+        client_id: form.huawei_client_id,
+        client_secret: form.huawei_client_secret,
+        connection_params: {
+          type: 'huawei_fusion_solar',
+          plant_code: plantCode,
+          poll_interval_seconds: form.poll_interval_seconds,
+        },
+      };
+    }
+    case 'modbus_tcp': {
+      return {
+        protocol: 'modbus' as BatteryProtocol,
+        subtype: 'modbus_tcp',
+        host: form.modbus_host,
+        port: form.modbus_port,
+        endpoint_url: `modbus://${form.modbus_host}:${form.modbus_port}`,
+        client_id: '',
+        client_secret: '',
+        connection_params: {
+          type: 'modbus_tcp',
+          unit_id: form.modbus_unit_id,
+          timeout_s: form.modbus_timeout_s,
+          poll_interval_seconds: form.poll_interval_seconds,
+        },
+      };
+    }
+    case 'ocpp_2_0_1': {
+      const { host, port } = splitUrl(form.ocpp_ws_url, 443);
+      return {
+        protocol: 'ocpp' as BatteryProtocol,
+        subtype: 'ocpp_2_0_1',
+        host,
+        port,
+        endpoint_url: form.ocpp_ws_url,
+        client_id: form.ocpp_charge_point_id,
+        client_secret: form.ocpp_auth_token,
+        connection_params: {
+          type: 'ocpp_2_0_1',
+          ws_url: form.ocpp_ws_url,
+          charge_point_id: form.ocpp_charge_point_id,
+          auth_token: form.ocpp_auth_token,
+          heartbeat_interval_s: form.ocpp_heartbeat_interval_s,
+        },
+      };
+    }
+    case 'rest_generic': {
+      const { host, port } = splitUrl(form.rest_base_url || 'http://localhost', 80);
+      let extra: Record<string, string> | undefined;
+      try {
+        extra = form.rest_extra_headers.trim()
+          ? JSON.parse(form.rest_extra_headers)
+          : undefined;
+      } catch {
+        extra = undefined;
+      }
+      return {
+        protocol: 'rest' as BatteryProtocol,
+        subtype: 'rest_generic',
+        host,
+        port,
+        endpoint_url: form.rest_base_url,
+        client_id: form.rest_auth_scheme === 'basic' ? form.rest_credential.split(':')[0] ?? '' : '',
+        client_secret: form.rest_credential,
+        connection_params: {
+          type: 'rest_generic',
+          base_url: form.rest_base_url,
+          auth_scheme: form.rest_auth_scheme,
+          credential: form.rest_credential,
+          extra_headers: extra,
+          poll_interval_seconds: form.poll_interval_seconds,
+        },
+      };
+    }
+  }
+}
+
 // Derive a stable UUID from a string (deterministic, useful for site_id from city/zone)
 function deriveUuidFromString(str: string): string {
   let hash = 0;
@@ -186,6 +320,7 @@ function deriveUuidFromString(str: string): string {
 
 const STEPS = [
   { id: 'identity', label: 'Identité', icon: IdCard },
+  { id: 'connection', label: 'Connexion', icon: Link2 },
   { id: 'tech', label: 'Specs', icon: Cpu },
   { id: 'operational', label: 'Opérationnels', icon: Sliders },
   { id: 'location', label: 'Géographie', icon: MapPin },
@@ -320,15 +455,20 @@ export function CreateBattery() {
     setError(null);
     try {
       const site_id = deriveUuidFromString(`${form.gme_zone}-${form.city || 'site'}`);
-      const plantCode = `PLANT-${form.asset_id}`;
+      const plantCode = form.huawei_plant_code_override.trim() || `PLANT-${form.asset_id}`;
+
+      // Build protocol + host/port + connection sub-block from the chosen type
+      const conn = buildConnection(form, plantCode);
+
       const metadata: BatteryMetadata = {
-        subtype: 'huawei_fusion_solar',
-        endpoint_url: form.endpoint_url,
+        subtype: conn.subtype,
+        endpoint_url: conn.endpoint_url,
         plant_code: plantCode,
         device_id: `DEV_${plantCode}`,
-        client_id: form.client_id,
-        client_secret: form.client_secret,
+        client_id: conn.client_id,
+        client_secret: conn.client_secret,
         model: form.model,
+        connection: conn.connection_params,
         identity: {
           serial_number: form.serial_number || undefined,
           manufacturer: form.manufacturer,
@@ -405,9 +545,9 @@ export function CreateBattery() {
         asset_id: form.asset_id,
         site_id,
         name: form.name,
-        protocol: 'rest',
-        host: '127.0.0.1',
-        port: 9999,
+        protocol: conn.protocol,
+        host: conn.host,
+        port: conn.port,
         capacity_kwh: form.capacity_kwh,
         max_power_kw: form.max_power_kw,
         min_soc_percent: form.min_soc_percent,
@@ -530,6 +670,211 @@ export function CreateBattery() {
                 onChange={(e) => set('warranty_end_date', e.target.value)}
               />
             </Field>
+          </div>
+        )}
+
+        {currentStep === 'connection' && (
+          <div className="space-y-4">
+            <Field
+              label="Type de connexion"
+              required
+              hint="Détermine le protocole et les paramètres à fournir."
+            >
+              <SelectInput
+                value={form.connection_type}
+                onChange={(e) =>
+                  set('connection_type', e.target.value as FormState['connection_type'])
+                }
+              >
+                <option value="huawei_fusion_solar">
+                  Huawei FusionSolar (Cloud / Simulateur)
+                </option>
+                <option value="modbus_tcp">Modbus TCP (LAN direct)</option>
+                <option value="ocpp_2_0_1">OCPP 2.0.1 (point de charge)</option>
+                <option value="rest_generic">REST générique</option>
+              </SelectInput>
+            </Field>
+
+            <div className="text-xs text-slate-500 italic">
+              {form.connection_type === 'huawei_fusion_solar' && (
+                <>
+                  Recommandé pour les LUNA2000. URL <code>http://127.0.0.1:9999</code>
+                  pour le simulateur intégré, sinon{' '}
+                  <code>https://intl.fusionsolar.huawei.com</code> pour le cloud.
+                </>
+              )}
+              {form.connection_type === 'modbus_tcp' && (
+                <>Pour batteries accessibles en LAN. Port Modbus standard 502.</>
+              )}
+              {form.connection_type === 'ocpp_2_0_1' && (
+                <>Pour bornes/onduleurs OCPP 2.0.1. URL WebSocket sécurisée (wss://).</>
+              )}
+              {form.connection_type === 'rest_generic' && (
+                <>Pour un fabricant non Huawei avec une API REST custom.</>
+              )}
+            </div>
+
+            {form.connection_type === 'huawei_fusion_solar' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Endpoint URL" required>
+                  <TextInput
+                    value={form.huawei_endpoint_url}
+                    onChange={(e) => set('huawei_endpoint_url', e.target.value)}
+                    placeholder="http://127.0.0.1:9999"
+                  />
+                </Field>
+                <Field
+                  label="Plant code (override)"
+                  hint="Vide = auto-dérivé en PLANT-{asset_id}"
+                >
+                  <TextInput
+                    value={form.huawei_plant_code_override}
+                    onChange={(e) => set('huawei_plant_code_override', e.target.value)}
+                  />
+                </Field>
+                <Field label="Client ID" required>
+                  <TextInput
+                    value={form.huawei_client_id}
+                    onChange={(e) => set('huawei_client_id', e.target.value)}
+                  />
+                </Field>
+                <Field label="Client Secret" required>
+                  <TextInput
+                    type="password"
+                    value={form.huawei_client_secret}
+                    onChange={(e) => set('huawei_client_secret', e.target.value)}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {form.connection_type === 'modbus_tcp' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Adresse IP" required>
+                  <TextInput
+                    value={form.modbus_host}
+                    onChange={(e) => set('modbus_host', e.target.value)}
+                    placeholder="192.168.1.100"
+                  />
+                </Field>
+                <Field label="Port" required>
+                  <NumInput
+                    value={form.modbus_port}
+                    onChange={(e) => set('modbus_port', parseInt(e.target.value, 10) || 502)}
+                  />
+                </Field>
+                <Field label="Unit ID (Slave)">
+                  <NumInput
+                    value={form.modbus_unit_id}
+                    onChange={(e) => set('modbus_unit_id', parseInt(e.target.value, 10) || 1)}
+                  />
+                </Field>
+                <Field label="Timeout (s)">
+                  <NumInput
+                    value={form.modbus_timeout_s}
+                    onChange={(e) => set('modbus_timeout_s', parseFloat(e.target.value) || 5)}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {form.connection_type === 'ocpp_2_0_1' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="URL WebSocket CSMS" required>
+                  <TextInput
+                    value={form.ocpp_ws_url}
+                    onChange={(e) => set('ocpp_ws_url', e.target.value)}
+                    placeholder="wss://ocpp.example.com/csms"
+                  />
+                </Field>
+                <Field label="Charge Point ID" required>
+                  <TextInput
+                    value={form.ocpp_charge_point_id}
+                    onChange={(e) => set('ocpp_charge_point_id', e.target.value)}
+                    placeholder="CP-001"
+                  />
+                </Field>
+                <Field label="Auth Token (Basic Auth password)">
+                  <TextInput
+                    type="password"
+                    value={form.ocpp_auth_token}
+                    onChange={(e) => set('ocpp_auth_token', e.target.value)}
+                  />
+                </Field>
+                <Field label="Heartbeat (s)">
+                  <NumInput
+                    value={form.ocpp_heartbeat_interval_s}
+                    onChange={(e) =>
+                      set('ocpp_heartbeat_interval_s', parseInt(e.target.value, 10) || 60)
+                    }
+                  />
+                </Field>
+              </div>
+            )}
+
+            {form.connection_type === 'rest_generic' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Base URL" required>
+                  <TextInput
+                    value={form.rest_base_url}
+                    onChange={(e) => set('rest_base_url', e.target.value)}
+                    placeholder="https://api.example.com/v1"
+                  />
+                </Field>
+                <Field label="Schéma d'authentification">
+                  <SelectInput
+                    value={form.rest_auth_scheme}
+                    onChange={(e) =>
+                      set('rest_auth_scheme', e.target.value as FormState['rest_auth_scheme'])
+                    }
+                  >
+                    <option value="bearer">Bearer Token</option>
+                    <option value="api_key">API Key</option>
+                    <option value="basic">Basic Auth (user:pass)</option>
+                  </SelectInput>
+                </Field>
+                <Field
+                  label="Credential"
+                  hint={
+                    form.rest_auth_scheme === 'basic'
+                      ? "Format: 'user:password'"
+                      : 'Token / clé API'
+                  }
+                >
+                  <TextInput
+                    type="password"
+                    value={form.rest_credential}
+                    onChange={(e) => set('rest_credential', e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Headers additionnels (JSON)"
+                  hint='Ex: {"X-Tenant": "acme"}'
+                >
+                  <TextInput
+                    value={form.rest_extra_headers}
+                    onChange={(e) => set('rest_extra_headers', e.target.value)}
+                    placeholder='{"X-Tenant": "acme"}'
+                  />
+                </Field>
+              </div>
+            )}
+
+            {/* Poll interval — common to all connection types */}
+            <div className="pt-4 border-t border-slate-700">
+              <Field
+                label="Intervalle de polling (s)"
+                hint="Fréquence à laquelle le BatteryPoller interroge cette batterie. 10s par défaut."
+              >
+                <NumInput
+                  min={1}
+                  value={form.poll_interval_seconds}
+                  onChange={(e) =>
+                    set('poll_interval_seconds', parseInt(e.target.value, 10) || 10)
+                  }
+                />
+              </Field>
+            </div>
           </div>
         )}
 

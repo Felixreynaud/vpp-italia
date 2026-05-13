@@ -231,6 +231,25 @@ export interface ComplianceMeta {
   data_retention_audit_url?: string;
 }
 
+export interface ConnectionParams {
+  type: 'huawei_fusion_solar' | 'modbus_tcp' | 'ocpp_2_0_1' | 'rest_generic';
+  plant_code?: string;
+  poll_interval_seconds?: number;
+  // modbus
+  unit_id?: number;
+  timeout_s?: number;
+  // ocpp
+  ws_url?: string;
+  charge_point_id?: string;
+  auth_token?: string;
+  heartbeat_interval_s?: number;
+  // rest generic
+  base_url?: string;
+  auth_scheme?: 'bearer' | 'api_key' | 'basic';
+  credential?: string;
+  extra_headers?: Record<string, string>;
+}
+
 export interface BatteryMetadata {
   subtype?: string;
   endpoint_url?: string;
@@ -239,6 +258,7 @@ export interface BatteryMetadata {
   client_id?: string;
   client_secret?: string;
   model?: string;
+  connection?: ConnectionParams;
 
   identity?: IdentityMeta;
   tech_specs?: TechSpecsMeta;
