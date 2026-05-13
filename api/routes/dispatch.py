@@ -1,19 +1,29 @@
-"""Dispatch endpoints — prices, schedule, P&L, backtest."""
+"""Dispatch endpoints — prices, schedule, P&L, backtest, apply."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from api.dependencies import CurrentUser, DbSession
-from data.models import DispatchPlan
-from data.schemas import DispatchPlanCreate, DispatchPlanListResponse, DispatchPlanResponse
+from data.models import Battery, DispatchPlan, DispatchSource
+from data.schemas import (
+    DispatchApplyRequest,
+    DispatchApplyResult,
+    DispatchPlanCreate,
+    DispatchPlanListResponse,
+    DispatchPlanResponse,
+)
 
 router = APIRouter(prefix="/dispatch")
+
+TZ_ROME = ZoneInfo("Europe/Rome")
 
 # ---------------------------------------------------------------------------
 # Existing plan CRUD (unchanged)
@@ -304,4 +314,93 @@ async def run_backtest(
         "days": (date_end - date_start).days + 1,
         "batteries": len(batteries),
         "zone": zone,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Apply a 24h optimization plan to all batteries of a site
+# ---------------------------------------------------------------------------
+
+
+@router.post("/apply")
+async def apply_dispatch_plan(
+    payload: DispatchApplyRequest,
+    db: DbSession,
+    _user: CurrentUser,
+) -> dict[str, Any]:
+    """Persist a 24h schedule for every active battery of the given site.
+
+    The schedule is expanded to 96 quarter-hours (4 QH per hour, same power_kw).
+    Total site power is divided equally across active batteries.
+
+    Existing plans for the same (site, today) are wiped first so each call
+    is idempotent — re-applying the same optimisation replaces the previous one.
+
+    The background DispatchApplier worker (started in the API lifespan) will
+    then poll the dispatch_plans table every 60 s and translate the QH for
+    the current time into a Huawei charge/discharge command per battery.
+    """
+    bats = await db.execute(
+        select(Battery)
+        .where(Battery.site_id == payload.site_id)
+        .where(Battery.is_active.is_(True))
+    )
+    batteries = list(bats.scalars().all())
+    if not batteries:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No active batteries for site {payload.site_id}",
+        )
+
+    today_iso = datetime.now(TZ_ROME).date().isoformat()
+    battery_ids = [b.battery_id for b in batteries]
+
+    # Wipe previous plans for these batteries today (replace fully)
+    await db.execute(
+        delete(DispatchPlan)
+        .where(DispatchPlan.delivery_date == today_iso)
+        .where(DispatchPlan.battery_id.in_(battery_ids))
+    )
+
+    # Translate 24 hourly slots → 96 QH × N batteries
+    try:
+        source_enum = DispatchSource(payload.source)
+    except ValueError:
+        source_enum = DispatchSource.MANUAL
+
+    per_bat = 1.0 / len(batteries)
+    plans_saved = 0
+    for slot in payload.schedule:
+        per_battery_kw = float(slot.power_kw) * per_bat
+        for qh_in_hour in range(4):
+            qh = slot.hour * 4 + qh_in_hour
+            for battery in batteries:
+                db.add(
+                    DispatchPlan(
+                        battery_id=battery.battery_id,
+                        delivery_date=today_iso,
+                        quarter_hour=qh,
+                        power_kw=Decimal(str(round(per_battery_kw, 2))),
+                        source=source_enum,
+                    )
+                )
+                plans_saved += 1
+
+    await db.flush()
+
+    result = DispatchApplyResult(
+        success=True,
+        message=f"Plan saved for {len(batteries)} battery/ies × 96 QH",
+        applied_at=datetime.now(UTC),
+        plans_saved=plans_saved,
+        batteries_targeted=len(batteries),
+    )
+
+    return {
+        "data": result.model_dump(mode="json"),
+        "meta": {
+            "site_id": str(payload.site_id),
+            "delivery_date": today_iso,
+            "source": source_enum.value,
+        },
     }

@@ -85,7 +85,9 @@ export interface OptimizeScenarioInfo {
 }
 
 export interface DispatchApplyRequest {
+  site_id: string;
   schedule: ScheduleSlot[];
+  source?: 'manual' | 'optimizer' | 'market_signal';
 }
 
 export interface DispatchApplyResponse {

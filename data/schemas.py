@@ -162,6 +162,25 @@ class DispatchCommand(BaseModel):
     reason: str | None = Field(default=None, max_length=256)
 
 
+class ScheduleSlot(BaseModel):
+    hour: int = Field(..., ge=0, le=23)
+    power_kw: float
+
+
+class DispatchApplyRequest(BaseModel):
+    site_id: UUID
+    schedule: list[ScheduleSlot] = Field(..., min_length=24, max_length=24)
+    source: str = Field(default="manual", description="manual | optimizer | market_signal")
+
+
+class DispatchApplyResult(BaseModel):
+    success: bool
+    message: str
+    applied_at: datetime
+    plans_saved: int
+    batteries_targeted: int
+
+
 class DispatchCommandResponse(BaseModel):
     command_id: str
     battery_id: UUID

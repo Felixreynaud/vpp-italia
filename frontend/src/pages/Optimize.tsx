@@ -96,17 +96,21 @@ export function Optimize() {
   }, [scenario, siteId, arbitrageMode, incertitudePct, mgpPrices]);
 
   const handleApply = async () => {
-    if (!result) return;
+    if (!result || !siteId) return;
     setApplyLoading(true);
     try {
-      const res = await applyDispatch({ schedule: result.schedule });
+      const res = await applyDispatch({ site_id: siteId, schedule: result.schedule });
       setApplySuccess(res.message);
       setShowConfirmModal(false);
-    } catch {
-      setApplySuccess("Erreur lors de l'application");
+    } catch (err) {
+      setApplySuccess(
+        err instanceof Error
+          ? `Erreur application: ${err.message}`
+          : "Erreur lors de l'application"
+      );
     } finally {
       setApplyLoading(false);
-      setTimeout(() => setApplySuccess(null), 5000);
+      setTimeout(() => setApplySuccess(null), 6000);
     }
   };
 
