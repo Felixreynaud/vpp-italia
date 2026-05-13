@@ -108,7 +108,7 @@ export function BatteryCard({ battery, onCommandSent }: BatteryCardProps) {
         <button
           onClick={() => { void handleCommand('charge'); }}
           disabled={!!loading || isFaultOrOffline}
-          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-success/10 text-success hover:bg-success/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           aria-label={`Charger batterie ${battery.asset_id}`}
         >
           {loading === 'charge' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
@@ -117,7 +117,7 @@ export function BatteryCard({ battery, onCommandSent }: BatteryCardProps) {
         <button
           onClick={() => { void handleCommand('discharge'); }}
           disabled={!!loading || isFaultOrOffline}
-          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-success/10 text-success hover:bg-success/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           aria-label={`Decharger batterie ${battery.asset_id}`}
         >
           {loading === 'discharge' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}

@@ -37,11 +37,11 @@ function siteIdFromPlantCode(plantCode: string): string {
 function stateColor(state: ConfiguredBattery['state']): string {
   switch (state) {
     case 'charging':
-      return 'text-blue-400 bg-blue-400/10';
-    case 'discharging':
-      return 'text-orange-400 bg-orange-400/10';
-    case 'idle':
       return 'text-emerald-400 bg-emerald-400/10';
+    case 'discharging':
+      return 'text-blue-400 bg-blue-400/10';
+    case 'idle':
+      return 'text-slate-300 bg-slate-500/10';
     case 'fault':
       return 'text-red-400 bg-red-400/10';
     case 'safe_state':
