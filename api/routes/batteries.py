@@ -5,11 +5,13 @@ from typing import Annotated, Any
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
+import httpx
+import structlog
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from api.dependencies import CurrentUser, DbSession
-from data.models import Battery, BatteryProtocol
+from data.models import Battery, BatteryProtocol, BatteryReading, DispatchPlan
 from data.schemas import (
     BatteryCreate,
     BatteryListResponse,
@@ -24,7 +26,160 @@ from data.schemas import (
     HuaweiDiscoverResponse,
 )
 
+logger = structlog.get_logger(__name__)
+
 router = APIRouter(prefix="/batteries")
+
+
+# ---------------------------------------------------------------------------
+# Huawei LUNA2000 catalogue — full specs used to pre-fill the "tech specs"
+# tab in the frontend. The simulator's catalogue covers capacity/power; we
+# add chemistry, voltage, cycles, efficiency, temperature limits here.
+# ---------------------------------------------------------------------------
+
+HUAWEI_LUNA2000_CATALOG: dict[str, dict[str, Any]] = {
+    "LUNA2000-5kWh": {
+        "tier": "residential",
+        "capacity_kwh": 5.0,
+        "max_power_kw": 2.5,
+        "chemistry": "LFP",
+        "nominal_voltage_v": 360.0,
+        "cycles_guaranteed": 6000,
+        "soh_initial_pct": 100.0,
+        "round_trip_efficiency_pct": 92.0,
+        "temp_min_c": -20.0,
+        "temp_max_c": 55.0,
+    },
+    "LUNA2000-10kWh": {
+        "tier": "residential",
+        "capacity_kwh": 10.0,
+        "max_power_kw": 5.0,
+        "chemistry": "LFP",
+        "nominal_voltage_v": 360.0,
+        "cycles_guaranteed": 6000,
+        "soh_initial_pct": 100.0,
+        "round_trip_efficiency_pct": 92.0,
+        "temp_min_c": -20.0,
+        "temp_max_c": 55.0,
+    },
+    "LUNA2000-15kWh": {
+        "tier": "residential",
+        "capacity_kwh": 15.0,
+        "max_power_kw": 7.5,
+        "chemistry": "LFP",
+        "nominal_voltage_v": 360.0,
+        "cycles_guaranteed": 6000,
+        "soh_initial_pct": 100.0,
+        "round_trip_efficiency_pct": 92.0,
+        "temp_min_c": -20.0,
+        "temp_max_c": 55.0,
+    },
+    "LUNA2000-30kWh": {
+        "tier": "residential",
+        "capacity_kwh": 30.0,
+        "max_power_kw": 15.0,
+        "chemistry": "LFP",
+        "nominal_voltage_v": 360.0,
+        "cycles_guaranteed": 6000,
+        "soh_initial_pct": 100.0,
+        "round_trip_efficiency_pct": 92.0,
+        "temp_min_c": -20.0,
+        "temp_max_c": 55.0,
+    },
+    "LUNA2000-107kWh": {
+        "tier": "commercial",
+        "capacity_kwh": 107.0,
+        "max_power_kw": 100.0,
+        "chemistry": "LFP",
+        "nominal_voltage_v": 800.0,
+        "cycles_guaranteed": 10000,
+        "soh_initial_pct": 100.0,
+        "round_trip_efficiency_pct": 92.0,
+        "temp_min_c": -30.0,
+        "temp_max_c": 60.0,
+    },
+    "LUNA2000-161kWh": {
+        "tier": "commercial",
+        "capacity_kwh": 161.0,
+        "max_power_kw": 150.0,
+        "chemistry": "LFP",
+        "nominal_voltage_v": 800.0,
+        "cycles_guaranteed": 10000,
+        "soh_initial_pct": 100.0,
+        "round_trip_efficiency_pct": 92.0,
+        "temp_min_c": -30.0,
+        "temp_max_c": 60.0,
+    },
+    "LUNA2000-215kWh": {
+        "tier": "industrial",
+        "capacity_kwh": 215.0,
+        "max_power_kw": 200.0,
+        "chemistry": "LFP",
+        "nominal_voltage_v": 800.0,
+        "cycles_guaranteed": 10000,
+        "soh_initial_pct": 100.0,
+        "round_trip_efficiency_pct": 92.0,
+        "temp_min_c": -30.0,
+        "temp_max_c": 60.0,
+    },
+}
+
+
+@router.get("/models")
+async def list_battery_models(_user: CurrentUser) -> dict[str, Any]:
+    """Catalogue Huawei LUNA2000 — pre-fill tech-specs in the create-battery form."""
+    return {
+        "data": [
+            {"name": name, **specs}
+            for name, specs in HUAWEI_LUNA2000_CATALOG.items()
+        ],
+        "meta": {"count": len(HUAWEI_LUNA2000_CATALOG), "manufacturer": "Huawei"},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Helpers — Huawei connector + simulator sync
+# ---------------------------------------------------------------------------
+
+
+def _is_local_simulator(endpoint_url: str) -> bool:
+    """The simulator runs at 127.0.0.1:9999 on the same EC2 by default."""
+    return "127.0.0.1" in endpoint_url or "localhost" in endpoint_url
+
+
+async def _push_to_simulator(
+    endpoint_url: str, plant_code: str, plant_name: str, model: str
+) -> dict[str, Any] | None:
+    """Create the plant+battery in the simulator. Silent fail on non-sim endpoints."""
+    if not _is_local_simulator(endpoint_url):
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            resp = await http.post(
+                f"{endpoint_url.rstrip('/')}/_sim/batteries",
+                json={"plant_code": plant_code, "plant_name": plant_name, "model": model},
+            )
+            if resp.status_code in (200, 201):
+                return resp.json()
+            logger.warning(
+                "simulator.push_failed",
+                status=resp.status_code,
+                body=resp.text[:200],
+            )
+    except Exception as exc:
+        logger.warning("simulator.push_error", error=str(exc))
+    return None
+
+
+async def _delete_from_simulator(endpoint_url: str, plant_code: str) -> None:
+    """Best-effort removal from the simulator (404 is ignored)."""
+    if not _is_local_simulator(endpoint_url):
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            await http.delete(f"{endpoint_url.rstrip('/')}/_sim/batteries/{plant_code}")
+    except Exception as exc:
+        logger.debug("simulator.delete_error", error=str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +298,40 @@ async def create_battery(
     db: DbSession,
     _user: CurrentUser,
 ) -> BatteryResponse:
-    """Register a new battery in the fleet."""
-    battery = Battery(**payload.model_dump())
+    """Register a new battery in the fleet.
+
+    If protocol=rest + metadata.subtype=huawei_fusion_solar + endpoint_url
+    targets our local simulator (127.0.0.1 / localhost), the corresponding
+    plant+battery is also created in the simulator so the BatteryPoller can
+    immediately fetch its KPIs.
+    """
+    meta: dict[str, Any] = dict(payload.metadata_ or {})
+
+    # Auto-derive plant_code + device_id from asset_id if not provided
+    if "plant_code" not in meta:
+        meta["plant_code"] = f"PLANT-{payload.asset_id}"
+    if "device_id" not in meta:
+        meta["device_id"] = f"DEV_{meta['plant_code']}"
+
+    # Try to materialise the plant in the local simulator
+    if (
+        payload.protocol == BatteryProtocol.REST
+        and meta.get("subtype") == "huawei_fusion_solar"
+    ):
+        endpoint_url = meta.get("endpoint_url", "")
+        model = (meta.get("identity") or {}).get("model") or meta.get("model")
+        if endpoint_url and model and _is_local_simulator(endpoint_url):
+            await _push_to_simulator(
+                endpoint_url=endpoint_url,
+                plant_code=meta["plant_code"],
+                plant_name=payload.name,
+                model=model,
+            )
+
+    battery = Battery(
+        **payload.model_dump(exclude={"metadata_"}),
+        metadata_=meta,
+    )
     db.add(battery)
     await db.flush()
     await db.refresh(battery)
@@ -190,10 +377,29 @@ async def delete_battery(
     db: DbSession,
     _user: CurrentUser,
 ) -> None:
-    """Remove a battery from the fleet (does not delete historical readings)."""
+    """Remove a battery from the fleet AND from the local simulator (if applicable).
+
+    Cascade-deletes the linked battery_readings and dispatch_plans rows since
+    the schema has FK without ON DELETE CASCADE.
+    """
     battery = await db.get(Battery, battery_id)
     if not battery:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Battery not found")
+
+    # Try to remove from simulator first (best-effort)
+    meta = battery.metadata_ or {}
+    if (
+        battery.protocol == BatteryProtocol.REST
+        and meta.get("subtype") == "huawei_fusion_solar"
+    ):
+        endpoint_url = meta.get("endpoint_url", "")
+        plant_code = meta.get("plant_code")
+        if endpoint_url and plant_code:
+            await _delete_from_simulator(endpoint_url, plant_code)
+
+    # Clean dependent rows (readings + plans) — no FK cascade in the schema
+    await db.execute(delete(BatteryReading).where(BatteryReading.battery_id == battery_id))
+    await db.execute(delete(DispatchPlan).where(DispatchPlan.battery_id == battery_id))
     await db.delete(battery)
     await db.flush()
 

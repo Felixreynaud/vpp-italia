@@ -160,6 +160,91 @@ async def sim_fleet() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Admin endpoints — add / remove a battery at runtime (not part of FusionSolar)
+# ---------------------------------------------------------------------------
+
+
+class SimBatteryCreate(BaseModel):
+    plant_code: str
+    plant_name: str | None = None
+    model: str  # one of LUNA2000_MODELS keys
+    initial_soc_pct: float = 50.0
+
+
+@app.post("/_sim/batteries", tags=["sim"])
+async def sim_add_battery(payload: SimBatteryCreate) -> dict[str, Any]:
+    """Create a new plant + battery in the simulator at runtime."""
+    if payload.model not in LUNA2000_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown model: {payload.model}. Known: {list(LUNA2000_MODELS)}",
+        )
+    if payload.plant_code in simulator._plants:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Plant {payload.plant_code} already exists",
+        )
+
+    simulator._add_plant(payload.plant_code, payload.model)
+
+    # Override plant_name and initial SoC if provided
+    if payload.plant_name:
+        simulator._plants[payload.plant_code].plant_name = payload.plant_name
+    device_id = f"DEV_{payload.plant_code}"
+    if device_id in simulator._batteries:
+        bat = simulator._batteries[device_id]
+        bat.soc = max(10.0, min(90.0, payload.initial_soc_pct))
+
+    return {
+        "plant_code": payload.plant_code,
+        "device_id": device_id,
+        "model": payload.model,
+        "capacity_kwh": LUNA2000_MODELS[payload.model][0],
+        "max_power_kw": LUNA2000_MODELS[payload.model][1],
+        "soc": payload.initial_soc_pct,
+    }
+
+
+@app.delete("/_sim/batteries/{plant_code}", tags=["sim"])
+async def sim_delete_battery(plant_code: str) -> dict[str, Any]:
+    """Remove a plant + its battery from the simulator at runtime."""
+    if plant_code not in simulator._plants:
+        raise HTTPException(status_code=404, detail=f"Plant {plant_code} not found")
+
+    del simulator._plants[plant_code]
+    device_ids_to_remove = [
+        dev_id for dev_id, bat in simulator._batteries.items() if bat.plant_code == plant_code
+    ]
+    for dev_id in device_ids_to_remove:
+        del simulator._batteries[dev_id]
+    simulator._dispatch_mode.discard(plant_code)
+    simulator._pending_tasks.pop(plant_code, None)
+    _last_realtime_call.pop(plant_code, None)
+
+    return {"deleted": plant_code, "removed_devices": device_ids_to_remove}
+
+
+@app.get("/_sim/models", tags=["sim"])
+async def sim_list_models() -> dict[str, Any]:
+    """Expose the LUNA2000 catalogue (used by the VPP UI to pre-fill tech specs)."""
+    return {
+        "models": [
+            {
+                "name": name,
+                "capacity_kwh": cap,
+                "max_power_kw": pwr,
+                "tier": (
+                    "residential" if cap < 50
+                    else "commercial" if cap < 200
+                    else "industrial"
+                ),
+            }
+            for name, (cap, pwr) in LUNA2000_MODELS.items()
+        ]
+    }
+
+
+# ---------------------------------------------------------------------------
 # Auth — POST /rest/openapi/pvms/nbi/v1/auth/token
 # ---------------------------------------------------------------------------
 
