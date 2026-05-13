@@ -8,8 +8,10 @@ interface EnergyFlowProps {
 export function EnergyFlow({ metrics }: EnergyFlowProps) {
   const power = metrics?.puissance_totale_kw ?? 0;
   const soc = metrics?.soc_moyen ?? 0;
-  const isDischarging = power > 0;
-  const isCharging = power < 0;
+  // Convention batterie : positive = charge (la batterie reçoit),
+  // négative = décharge (la batterie injecte au réseau).
+  const isCharging = power > 0;
+  const isDischarging = power < 0;
   const absPower = Math.abs(power);
 
   const maxPower = 5000;
