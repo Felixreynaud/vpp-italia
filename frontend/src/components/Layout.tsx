@@ -10,15 +10,17 @@ import {
   X,
   Activity,
   Settings,
+  FolderOpen,
 } from 'lucide-react';
 import { useCETClock } from '../hooks/useCETClock';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/optimize', label: 'Optimisation', icon: Zap },
-  { to: '/batteries', label: 'Parc Batteries', icon: Battery },
+  { to: '/batteries', label: 'Activations batteries', icon: Battery },
   { to: '/history', label: 'Historique', icon: BarChart2 },
-  { to: '/admin/batteries', label: 'Admin Batteries', icon: Settings },
+  { to: '/admin/batteries', label: 'Management batterie', icon: Settings },
+  { to: '/portfolio', label: 'Portefeuille batteries', icon: FolderOpen },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

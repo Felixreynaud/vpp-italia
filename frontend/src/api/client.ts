@@ -259,8 +259,17 @@ export async function fetchDispatchSessions(): Promise<DispatchSession[]> {
 // Admin — fleet management (no MOCK fallback, talks to real backend)
 // ---------------------------------------------------------------------------
 
-export async function listConfiguredBatteries(): Promise<ConfiguredBattery[]> {
-  const { data } = await axiosInstance.get<{ data: ConfiguredBattery[] }>('/api/v1/batteries');
+export async function listConfiguredBatteries(
+  options: { active?: boolean } = {}
+): Promise<ConfiguredBattery[]> {
+  const params: Record<string, string> = {};
+  if (options.active !== undefined) {
+    params.active = String(options.active);
+  }
+  const { data } = await axiosInstance.get<{ data: ConfiguredBattery[] }>(
+    '/api/v1/batteries',
+    { params }
+  );
   return data.data;
 }
 
@@ -313,6 +322,31 @@ export async function createBattery(
     payload
   );
   return data;
+}
+
+export async function activateBattery(id: string): Promise<ConfiguredBattery> {
+  const { data } = await axiosInstance.post<ConfiguredBattery>(
+    `/api/v1/batteries/${id}/activate`
+  );
+  return data;
+}
+
+export async function deactivateBattery(id: string): Promise<ConfiguredBattery> {
+  const { data } = await axiosInstance.post<ConfiguredBattery>(
+    `/api/v1/batteries/${id}/deactivate`
+  );
+  return data;
+}
+
+export async function bulkSetBatteryActive(
+  batteryIds: string[],
+  active: boolean
+): Promise<ConfiguredBattery[]> {
+  const { data } = await axiosInstance.post<{ data: ConfiguredBattery[] }>(
+    '/api/v1/batteries/bulk-activate',
+    { battery_ids: batteryIds, active }
+  );
+  return data.data;
 }
 
 export async function testBatteryConnection(

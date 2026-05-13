@@ -221,20 +221,28 @@ async def list_batteries(
     db: DbSession,
     _user: CurrentUser,
     site_id: Annotated[UUID | None, Query()] = None,
+    active: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "Filter on the management flag. true = batteries actively "
+                "managed by the VPP (visible in Dashboard/Optim/Activations). "
+                "false = portfolio-only (catalogued but not active). "
+                "Omit to return both."
+            )
+        ),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     cursor: Annotated[str | None, Query()] = None,
 ) -> BatteryListResponse:
-    """List all batteries, optionally filtered by site.
-
-    Each battery is enriched with the latest reading (soc_percent, power_kw,
-    temperature_c, …) when available — so a single GET is enough to render
-    the dashboard / battery cards.
-    """
+    """List batteries. Defaults to all; use ?active=true|false to filter."""
     from sqlalchemy import text
 
     query = select(Battery).order_by(Battery.battery_id).limit(limit + 1)
     if site_id:
         query = query.where(Battery.site_id == site_id)
+    if active is not None:
+        query = query.where(Battery.is_active.is_(active))
     if cursor:
         query = query.where(Battery.battery_id > UUID(cursor))
 
@@ -328,11 +336,84 @@ async def create_battery(
                 model=model,
             )
 
-    battery = Battery(
-        **payload.model_dump(exclude={"metadata_"}),
-        metadata_=meta,
-    )
+    # New batteries land in the portfolio (inactive) — they must be explicitly
+    # activated from the Management page before showing up in Dashboard / Optim.
+    fields = payload.model_dump(exclude={"metadata_"})
+    fields["is_active"] = False
+    battery = Battery(**fields, metadata_=meta)
     db.add(battery)
+    await db.flush()
+    await db.refresh(battery)
+    return BatteryResponse.model_validate(battery)
+
+
+# ---------------------------------------------------------------------------
+# Portfolio → Management activation toggle
+# ---------------------------------------------------------------------------
+
+
+from pydantic import BaseModel
+
+
+class BulkActivatePayload(BaseModel):
+    battery_ids: list[UUID]
+    active: bool = True
+
+
+@router.post("/bulk-activate", response_model=BatteryListResponse)
+async def bulk_set_active(
+    payload: BulkActivatePayload,
+    db: DbSession,
+    _user: CurrentUser,
+) -> BatteryListResponse:
+    """Activate (or deactivate) several batteries at once.
+
+    Used by the 'Importer du portefeuille' modal in Management.
+    """
+    if not payload.battery_ids:
+        return BatteryListResponse(data=[], meta={"count": 0, "next_cursor": None})
+
+    result = await db.execute(
+        select(Battery).where(Battery.battery_id.in_(payload.battery_ids))
+    )
+    batteries = result.scalars().all()
+    for b in batteries:
+        b.is_active = payload.active
+    await db.flush()
+
+    return BatteryListResponse(
+        data=[BatteryResponse.model_validate(b) for b in batteries],
+        meta={"count": len(batteries), "next_cursor": None},
+    )
+
+
+@router.post("/{battery_id}/activate", response_model=BatteryResponse)
+async def activate_battery(
+    battery_id: UUID,
+    db: DbSession,
+    _user: CurrentUser,
+) -> BatteryResponse:
+    """Move a battery from Portfolio to Management (is_active=true)."""
+    battery = await db.get(Battery, battery_id)
+    if not battery:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Battery not found")
+    battery.is_active = True
+    await db.flush()
+    await db.refresh(battery)
+    return BatteryResponse.model_validate(battery)
+
+
+@router.post("/{battery_id}/deactivate", response_model=BatteryResponse)
+async def deactivate_battery(
+    battery_id: UUID,
+    db: DbSession,
+    _user: CurrentUser,
+) -> BatteryResponse:
+    """Remove a battery from Management (is_active=false). Historical data is kept."""
+    battery = await db.get(Battery, battery_id)
+    if not battery:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Battery not found")
+    battery.is_active = False
     await db.flush()
     await db.refresh(battery)
     return BatteryResponse.model_validate(battery)
@@ -622,6 +703,8 @@ async def bulk_import_batteries(
             port=port,
             capacity_kwh=item.capacity_kwh,
             max_power_kw=item.max_power_kw,
+            # FusionSolar imports also land in the portfolio (inactive).
+            is_active=False,
             metadata_=metadata,
         )
         db.add(battery)

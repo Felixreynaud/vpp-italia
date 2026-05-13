@@ -556,7 +556,7 @@ export function CreateBattery() {
         metadata_: metadata,
       };
       await createBattery(payload);
-      navigate('/admin/batteries');
+      navigate('/portfolio');
     } catch (err) {
       setError(
         err instanceof Error
@@ -572,7 +572,7 @@ export function CreateBattery() {
     <div className="space-y-6">
       <header className="flex items-center gap-3">
         <button
-          onClick={() => navigate('/admin/batteries')}
+          onClick={() => navigate('/portfolio')}
           className="p-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-200"
         >
           <ChevronLeft className="w-4 h-4" />

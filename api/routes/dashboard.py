@@ -30,8 +30,14 @@ logger = structlog.get_logger(__name__)
 
 @router.get("/metrics/fleet")
 async def fleet_metrics(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
-    """Aggregate fleet KPIs from Battery + latest readings."""
-    total_res = await db.execute(select(func.count()).select_from(Battery))
+    """Aggregate fleet KPIs — restricted to managed (is_active=true) batteries.
+
+    Portfolio-only batteries (is_active=false) are catalogued but not yet
+    operated by the VPP, so they're excluded from dashboard KPIs.
+    """
+    total_res = await db.execute(
+        select(func.count()).select_from(Battery).where(Battery.is_active.is_(True))
+    )
     batteries_total = int(total_res.scalar_one_or_none() or 0)
 
     active_states = (
@@ -40,25 +46,34 @@ async def fleet_metrics(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
         BatteryState.DISCHARGING,
     )
     active_res = await db.execute(
-        select(func.count()).select_from(Battery).where(Battery.state.in_(active_states))
+        select(func.count())
+        .select_from(Battery)
+        .where(Battery.is_active.is_(True))
+        .where(Battery.state.in_(active_states))
     )
     batteries_actives = int(active_res.scalar_one_or_none() or 0)
 
-    cap_res = await db.execute(select(func.coalesce(func.sum(Battery.capacity_kwh), 0)))
+    cap_res = await db.execute(
+        select(func.coalesce(func.sum(Battery.capacity_kwh), 0)).where(
+            Battery.is_active.is_(True)
+        )
+    )
     total_capacity_kwh = float(cap_res.scalar_one_or_none() or 0)
 
     soc_moyen = 0.0
     puissance_totale_kw = 0.0
     try:
-        # Last reading per battery — average SoC + sum of power
+        # Last reading per battery — average SoC + sum of power, restricted to managed batteries
         agg_sql = text(
             """
             WITH latest AS (
-                SELECT DISTINCT ON (battery_id)
-                    battery_id, soc_percent, power_kw, time
-                FROM battery_readings
-                WHERE time > NOW() - INTERVAL '10 minutes'
-                ORDER BY battery_id, time DESC
+                SELECT DISTINCT ON (r.battery_id)
+                    r.battery_id, r.soc_percent, r.power_kw, r.time
+                FROM battery_readings r
+                JOIN batteries b ON b.battery_id = r.battery_id
+                WHERE r.time > NOW() - INTERVAL '10 minutes'
+                  AND b.is_active = true
+                ORDER BY r.battery_id, r.time DESC
             )
             SELECT
                 COALESCE(AVG(soc_percent), 0) AS soc_avg,
