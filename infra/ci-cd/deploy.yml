@@ -1,8 +1,13 @@
 name: Déploiement production
 
+# Déclenchement manuel uniquement.
+# Pour réactiver le déploiement automatique au merge sur main :
+#   1. Configurer les secrets GitHub : EC2_HOST (IP de l'EIP) et EC2_SSH_PRIVATE_KEY
+#   2. Décommenter le bloc "push" ci-dessous
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
 
 # Un seul déploiement à la fois — annule le précédent si un nouveau push arrive
 concurrency:
