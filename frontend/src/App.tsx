@@ -5,6 +5,7 @@ import { Optimize } from './pages/Optimize';
 import { Batteries } from './pages/Batteries';
 import { History } from './pages/History';
 import { Login } from './pages/Login';
+import { AdminBatteries } from './pages/admin/Batteries';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('vpp_token');
@@ -27,6 +28,7 @@ export default function App() {
                   <Route path="/optimize" element={<Optimize />} />
                   <Route path="/batteries" element={<Batteries />} />
                   <Route path="/history" element={<History />} />
+                  <Route path="/admin/batteries" element={<AdminBatteries />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>

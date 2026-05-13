@@ -118,6 +118,79 @@ export interface DispatchSession {
   marche: string;
 }
 
+// ---------------------------------------------------------------------------
+// Admin — configured batteries (DB-side, distinct from the runtime Battery type)
+// ---------------------------------------------------------------------------
+
+export interface ConfiguredBattery {
+  battery_id: string;
+  asset_id: string;
+  site_id: string;
+  name: string;
+  protocol: BatteryProtocol;
+  host: string;
+  port: number;
+  capacity_kwh: string;
+  max_power_kw: string;
+  min_soc_percent: string;
+  max_soc_percent: string;
+  ramp_rate_kw_per_min: string | null;
+  state: BatteryState;
+  is_active: boolean;
+  metadata_?: {
+    subtype?: string;
+    endpoint_url?: string;
+    plant_code?: string;
+    device_id?: string;
+    model?: string;
+    client_id?: string;
+    client_secret?: string;
+  } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscoveredBattery {
+  plant_code: string;
+  plant_name: string;
+  device_id: string;
+  model: string | null;
+  capacity_kwh: string;
+  max_power_kw: string;
+}
+
+export interface DiscoverResponse {
+  data: DiscoveredBattery[];
+  meta: { count: number; endpoint: string };
+}
+
+export interface BulkImportItem {
+  asset_id: string;
+  site_id: string;
+  name: string;
+  plant_code: string;
+  device_id: string;
+  model: string | null;
+  capacity_kwh: string;
+  max_power_kw: string;
+}
+
+export interface BulkImportResponse {
+  imported: number;
+  skipped: number;
+  battery_ids: string[];
+}
+
+export interface TestConnectionResponse {
+  ok: boolean;
+  error?: string;
+  soc_percent?: number;
+  power_kw?: number;
+  voltage_v?: number;
+  temperature_c?: number;
+  soh?: number;
+}
+
 export interface LoginRequest {
   username: string;
   password: string;

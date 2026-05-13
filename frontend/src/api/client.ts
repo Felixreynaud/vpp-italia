@@ -1,6 +1,10 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import type {
   Battery,
+  BulkImportItem,
+  BulkImportResponse,
+  ConfiguredBattery,
+  DiscoverResponse,
   FleetMetrics,
   MGPPricesResponse,
   OptimizeResult,
@@ -15,6 +19,7 @@ import type {
   LoginResponse,
   HistoryPoint,
   DispatchSession,
+  TestConnectionResponse,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
@@ -230,6 +235,58 @@ export async function fetchDispatchSessions(): Promise<DispatchSession[]> {
   if (MOCK_DATA) return getMockDispatchSessions();
   const { data } = await axiosInstance.get<{ data: DispatchSession[] }>('/api/v1/history/sessions');
   return data.data;
+}
+
+// ---------------------------------------------------------------------------
+// Admin — fleet management (no MOCK fallback, talks to real backend)
+// ---------------------------------------------------------------------------
+
+export async function listConfiguredBatteries(): Promise<ConfiguredBattery[]> {
+  const { data } = await axiosInstance.get<{ data: ConfiguredBattery[] }>('/api/v1/batteries');
+  return data.data;
+}
+
+export async function discoverHuawei(
+  endpointUrl: string,
+  clientId: string,
+  clientSecret: string
+): Promise<DiscoverResponse> {
+  const { data } = await axiosInstance.post<DiscoverResponse>(
+    '/api/v1/batteries/discover/huawei',
+    { endpoint_url: endpointUrl, client_id: clientId, client_secret: clientSecret }
+  );
+  return data;
+}
+
+export async function bulkImportBatteries(
+  endpointUrl: string,
+  clientId: string,
+  clientSecret: string,
+  batteries: BulkImportItem[]
+): Promise<BulkImportResponse> {
+  const { data } = await axiosInstance.post<BulkImportResponse>(
+    '/api/v1/batteries/bulk-import',
+    {
+      endpoint_url: endpointUrl,
+      client_id: clientId,
+      client_secret: clientSecret,
+      batteries,
+    }
+  );
+  return data;
+}
+
+export async function deleteBattery(batteryId: string): Promise<void> {
+  await axiosInstance.delete(`/api/v1/batteries/${batteryId}`);
+}
+
+export async function testBatteryConnection(
+  batteryId: string
+): Promise<TestConnectionResponse> {
+  const { data } = await axiosInstance.post<TestConnectionResponse>(
+    `/api/v1/batteries/${batteryId}/test-connection`
+  );
+  return data;
 }
 
 export default axiosInstance;
