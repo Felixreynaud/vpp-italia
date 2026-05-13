@@ -404,6 +404,13 @@ done
 
 if [ -n "$TUNNEL_URL" ]; then
     log "Tunnel Cloudflare actif : $TUNNEL_URL"
+
+    # Met à jour le root_url de Grafana avec l'URL publique pour que ses
+    # redirections (ex: /grafana/ -> /grafana/login) pointent vers le bon
+    # hostname externe au lieu de localhost.
+    sed -i "s|^root_url *=.*|root_url = $TUNNEL_URL/grafana/|" /etc/grafana/grafana.ini
+    systemctl restart grafana-server || log "Echec redémarrage Grafana"
+
     # AWS CLI v1 interprète par défaut les valeurs commençant par http(s):// comme
     # des URIs à fetcher (cli_follow_urlparam). On désactive ce comportement pour
     # pouvoir stocker une URL telle quelle dans SSM.
