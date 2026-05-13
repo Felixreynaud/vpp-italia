@@ -203,7 +203,15 @@ async def send_dispatch_command(
     db: DbSession,
     _user: CurrentUser,
 ) -> DispatchCommandResponse:
-    """Send an immediate dispatch command to a battery (manual override)."""
+    """Send an immediate dispatch command (manual override).
+
+    Routes to the right connector based on battery.protocol + metadata.subtype:
+    - REST + huawei_fusion_solar → HuaweiBatteryClient.charge/discharge/stop
+    - Other → Modbus connector (legacy fallback)
+
+    Power convention (frontend → backend): power_kw > 0 means **discharge**,
+    < 0 means **charge**, 0 means **stop** (matches DispatchCommand docstring).
+    """
     battery = await db.get(Battery, battery_id)
     if not battery:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Battery not found")
@@ -214,8 +222,45 @@ async def send_dispatch_command(
             detail=f"Requested power {command.power_kw} kW exceeds battery limit {battery.max_power_kw} kW",
         )
 
-    # Dispatch is handled by the connector layer asynchronously
-    from connectors.modbus import send_power_setpoint  # lazy import to avoid circular deps
+    meta = battery.metadata_ or {}
+    subtype = meta.get("subtype")
+
+    # ---- Huawei FusionSolar path ----
+    if battery.protocol == BatteryProtocol.REST and subtype == "huawei_fusion_solar":
+        client = _build_huawei_client(
+            meta["endpoint_url"], meta["client_id"], meta["client_secret"]
+        )
+        plant_code = meta["plant_code"]
+
+        # Ensure the plant is in thirdPartyDispatch mode (idempotent)
+        try:
+            await client.set_dispatch_mode(plant_code)
+        except Exception:
+            pass  # already enabled or transient; charge/discharge will raise if not OK
+
+        power_kw_abs = abs(float(command.power_kw))
+        power_w = power_kw_abs * 1000.0
+        try:
+            if command.power_kw > 0:
+                task = await client.discharge(plant_code, power_w=power_w)
+            elif command.power_kw < 0:
+                task = await client.charge(plant_code, power_w=power_w)
+            else:
+                task = await client.stop(plant_code)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Huawei dispatch failed: {exc}",
+            ) from exc
+
+        return DispatchCommandResponse(
+            command_id=task.request_id,
+            battery_id=battery_id,
+            power_kw=command.power_kw,
+        )
+
+    # ---- Modbus fallback (legacy) ----
+    from connectors.modbus import send_power_setpoint
 
     command_id = await send_power_setpoint(battery, float(command.power_kw))
     return DispatchCommandResponse(

@@ -222,7 +222,23 @@ export async function sendBatteryCommand(
   req: BatteryCommandRequest
 ): Promise<void> {
   if (MOCK_DATA) return;
-  await axiosInstance.post(`/api/v1/batteries/${batteryId}/command`, req);
+
+  // Convention backend (DispatchCommand): power_kw > 0 = discharge, < 0 = charge, 0 = stop.
+  // We translate from the UI's intent + power magnitude.
+  let power_kw: number;
+  if (req.command === 'charge') {
+    power_kw = -Math.abs(req.power_kw ?? 0);
+  } else if (req.command === 'discharge') {
+    power_kw = +Math.abs(req.power_kw ?? 0);
+  } else {
+    power_kw = 0;
+  }
+
+  await axiosInstance.post(`/api/v1/batteries/${batteryId}/dispatch`, {
+    power_kw,
+    duration_minutes: 15,
+    reason: `manual ${req.command} from UI`,
+  });
 }
 
 export async function fetchHistory(): Promise<HistoryPoint[]> {
