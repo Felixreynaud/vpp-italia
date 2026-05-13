@@ -45,6 +45,12 @@ async def close_db() -> None:
         logger.info("db.closed")
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Expose the session factory to background workers (e.g. BatteryPoller)."""
+    assert _session_factory is not None, "Database not initialized — call init_db() first"
+    return _session_factory
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     assert _session_factory is not None, "Database not initialized"
     async with _session_factory() as session:

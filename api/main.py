@@ -10,19 +10,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from api.dependencies import close_db, init_db
+from api.dependencies import close_db, get_session_factory, init_db
 from api.routers.optimization import router as optimization_router
 from api.routes import auth, batteries, dispatch, markets, metrics
+from core.battery_polling import BatteryPoller
 from core.scheduler import MarketScheduler
 
 logger = structlog.get_logger(__name__)
 
 _scheduler: MarketScheduler | None = None
+_battery_poller: BatteryPoller | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global _scheduler
+    global _scheduler, _battery_poller
 
     logger.info("vpp.startup", version=app.version)
     await init_db()
@@ -30,9 +32,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _scheduler = MarketScheduler()
     await _scheduler.start()
 
+    _battery_poller = BatteryPoller(session_factory=get_session_factory())
+    await _battery_poller.start()
+
     yield
 
     logger.info("vpp.shutdown")
+    if _battery_poller:
+        await _battery_poller.stop()
     if _scheduler:
         await _scheduler.stop()
     await close_db()
