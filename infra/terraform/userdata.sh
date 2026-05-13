@@ -404,6 +404,10 @@ done
 
 if [ -n "$TUNNEL_URL" ]; then
     log "Tunnel Cloudflare actif : $TUNNEL_URL"
+    # AWS CLI v1 interprète par défaut les valeurs commençant par http(s):// comme
+    # des URIs à fetcher (cli_follow_urlparam). On désactive ce comportement pour
+    # pouvoir stocker une URL telle quelle dans SSM.
+    aws configure set cli_follow_urlparam false
     aws ssm put-parameter \
         --name "$SSM_PREFIX/cloudflare-tunnel-url" \
         --value "$TUNNEL_URL" \
