@@ -120,10 +120,9 @@ async def list_batteries(
         item = BatteryResponse.model_validate(b)
         if r is not None:
             item.soc_percent = float(r.soc_percent) if r.soc_percent is not None else None
-            # Convention exposée au frontend : positive = décharge, négative = charge.
-            # On inverse le signe par rapport à battery_readings (qui stocke en
-            # convention Huawei : positive = charge).
-            item.power_kw = -float(r.power_kw) if r.power_kw is not None else None
+            # Convention exposée : positive = charge (la batterie reçoit), négative = décharge.
+            # On garde la valeur native de battery_readings (qui suit la convention Huawei).
+            item.power_kw = float(r.power_kw) if r.power_kw is not None else None
             item.voltage_v = float(r.voltage_v) if r.voltage_v is not None else None
             item.current_a = float(r.current_a) if r.current_a is not None else None
             item.temperature_c = (
@@ -212,8 +211,8 @@ async def send_dispatch_command(
     - REST + huawei_fusion_solar → HuaweiBatteryClient.charge/discharge/stop
     - Other → Modbus connector (legacy fallback)
 
-    Power convention (frontend → backend): power_kw > 0 means **discharge**,
-    < 0 means **charge**, 0 means **stop** (matches DispatchCommand docstring).
+    Power convention: power_kw > 0 means **charge** (la batterie reçoit),
+    < 0 means **discharge**, 0 means **stop**.
     """
     battery = await db.get(Battery, battery_id)
     if not battery:
@@ -239,15 +238,15 @@ async def send_dispatch_command(
         try:
             await client.set_dispatch_mode(plant_code)
         except Exception:
-            pass  # already enabled or transient; charge/discharge will raise if not OK
+            pass
 
         power_kw_abs = abs(float(command.power_kw))
         power_w = power_kw_abs * 1000.0
         try:
             if command.power_kw > 0:
-                task = await client.discharge(plant_code, power_w=power_w)
-            elif command.power_kw < 0:
                 task = await client.charge(plant_code, power_w=power_w)
+            elif command.power_kw < 0:
+                task = await client.discharge(plant_code, power_w=power_w)
             else:
                 task = await client.stop(plant_code)
         except Exception as exc:
@@ -256,10 +255,14 @@ async def send_dispatch_command(
                 detail=f"Huawei dispatch failed: {exc}",
             ) from exc
 
-        # Immediately re-read the state so the frontend sees the new state
-        # without waiting for the next 10-second poller cycle.
+        # Immediately re-read the state AND persist a fresh BatteryReading so
+        # the enriched GET /batteries returns the new power_kw without waiting
+        # for the next poller cycle (up to 10s otherwise).
         try:
-            from data.models import BatteryState
+            from datetime import UTC, datetime
+            from decimal import Decimal
+
+            from data.models import BatteryReading, BatteryState
 
             statuses = await client.get_battery_realtime(
                 device_ids=[meta["device_id"]], plant_code=plant_code
@@ -267,14 +270,30 @@ async def send_dispatch_command(
             if statuses:
                 s = statuses[0]
                 if s.power_kw > 0.1:
-                    battery.state = BatteryState.CHARGING
+                    new_state = BatteryState.CHARGING
                 elif s.power_kw < -0.1:
-                    battery.state = BatteryState.DISCHARGING
+                    new_state = BatteryState.DISCHARGING
                 else:
-                    battery.state = BatteryState.IDLE
+                    new_state = BatteryState.IDLE
+                battery.state = new_state
+
+                reading = BatteryReading(
+                    time=datetime.now(UTC),
+                    battery_id=battery_id,
+                    soc_percent=Decimal(str(s.soc)) if s.soc is not None else None,
+                    power_kw=Decimal(str(s.power_kw)) if s.power_kw is not None else None,
+                    voltage_v=Decimal(str(s.voltage_v)) if s.voltage_v is not None else None,
+                    current_a=Decimal(str(s.current_a)) if s.current_a is not None else None,
+                    temperature_c=(
+                        Decimal(str(s.temperature_c)) if s.temperature_c is not None else None
+                    ),
+                    state=new_state,
+                    raw=s.model_dump(mode="json"),
+                )
+                db.add(reading)
                 await db.flush()
         except Exception:
-            pass  # state will get refreshed by the next poller cycle anyway
+            pass  # next poller cycle will fix things anyway
 
         return DispatchCommandResponse(
             command_id=task.request_id,
@@ -443,8 +462,8 @@ async def test_connection(
     return {
         "ok": True,
         "soc_percent": s.soc,
-        # Convention business pour le frontend : positive = décharge.
-        "power_kw": -s.power_kw if s.power_kw is not None else None,
+        # Convention exposée : positive = charge, négative = décharge.
+        "power_kw": s.power_kw,
         "voltage_v": s.voltage_v,
         "temperature_c": s.temperature_c,
         "soh": s.soh,

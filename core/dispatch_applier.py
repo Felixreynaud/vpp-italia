@@ -138,10 +138,11 @@ class DispatchApplier:
             power_kw = float(plan.power_kw)
             power_w_abs = abs(power_kw) * 1000.0
 
+            # Convention "batterie" : positive = charge, négative = décharge.
             if power_kw > 0.1:
-                await client.discharge(plant_code, power_w=power_w_abs)
-            elif power_kw < -0.1:
                 await client.charge(plant_code, power_w=power_w_abs)
+            elif power_kw < -0.1:
+                await client.discharge(plant_code, power_w=power_w_abs)
             else:
                 await client.stop(plant_code)
 

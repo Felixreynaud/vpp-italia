@@ -223,13 +223,13 @@ export async function sendBatteryCommand(
 ): Promise<void> {
   if (MOCK_DATA) return;
 
-  // Convention backend (DispatchCommand): power_kw > 0 = discharge, < 0 = charge, 0 = stop.
-  // We translate from the UI's intent + power magnitude.
+  // Convention "batterie" : positive = charge, négative = décharge, 0 = stop.
+  // Cohérente avec ce que le backend /dispatch attend désormais.
   let power_kw: number;
   if (req.command === 'charge') {
-    power_kw = -Math.abs(req.power_kw ?? 0);
-  } else if (req.command === 'discharge') {
     power_kw = +Math.abs(req.power_kw ?? 0);
+  } else if (req.command === 'discharge') {
+    power_kw = -Math.abs(req.power_kw ?? 0);
   } else {
     power_kw = 0;
   }
