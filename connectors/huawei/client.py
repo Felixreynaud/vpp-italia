@@ -49,9 +49,10 @@ class HuaweiBatteryClient:
         final = await client.wait_for_task(task.request_id, plant_code)
     """
 
-    def __init__(self, domain: str, auth: HuaweiAuthClient) -> None:
+    def __init__(self, domain: str, auth: HuaweiAuthClient, scheme: str = "https") -> None:
         self._domain = domain
         self._auth = auth
+        self._scheme = scheme
         # Last call timestamps per plant for rate-limit enforcement
         self._last_realtime_call: dict[str, float] = {}
         self._pending_tasks: dict[str, str] = {}  # plant_code → request_id
@@ -73,10 +74,10 @@ class HuaweiBatteryClient:
     # ------------------------------------------------------------------
 
     def _third_data_url(self, path: str) -> str:
-        return f"https://{self._domain}/thirdData/{path}"
+        return f"{self._scheme}://{self._domain}/thirdData/{path}"
 
     def _nbi_url(self, path: str) -> str:
-        return f"https://{self._domain}/rest/openapi/pvms/{path}"
+        return f"{self._scheme}://{self._domain}/rest/openapi/pvms/{path}"
 
     # ------------------------------------------------------------------
     # HTTP helpers

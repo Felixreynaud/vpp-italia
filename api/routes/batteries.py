@@ -1,23 +1,64 @@
 """Battery management endpoints."""
 
-from typing import Annotated
-from uuid import UUID
+from decimal import Decimal
+from typing import Annotated, Any
+from urllib.parse import urlparse
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from api.dependencies import CurrentUser, DbSession
-from data.models import Battery
+from data.models import Battery, BatteryProtocol
 from data.schemas import (
     BatteryCreate,
     BatteryListResponse,
     BatteryResponse,
     BatteryUpdate,
+    BulkImportRequest,
+    BulkImportResponse,
+    DiscoveredBattery,
     DispatchCommand,
     DispatchCommandResponse,
+    HuaweiDiscoverRequest,
+    HuaweiDiscoverResponse,
 )
 
 router = APIRouter(prefix="/batteries")
+
+
+# ---------------------------------------------------------------------------
+# Helpers — Huawei connector
+# ---------------------------------------------------------------------------
+
+
+def _split_host_port(endpoint_url: str) -> tuple[str, int]:
+    """Extract (host, port) from a URL — defaults to 80/443 if not given."""
+    parsed = urlparse(endpoint_url)
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return host, port
+
+
+def _build_huawei_client(endpoint_url: str, client_id: str, client_secret: str) -> Any:
+    """Build a HuaweiBatteryClient targeted at a custom endpoint URL.
+
+    Accepts URLs with or without scheme: "http://127.0.0.1:9999",
+    "https://intl.fusionsolar.huawei.com", or simply "127.0.0.1:9999".
+    """
+    from connectors.huawei.auth import HuaweiAuthClient
+    from connectors.huawei.client import HuaweiBatteryClient
+
+    parsed = urlparse(endpoint_url if "://" in endpoint_url else f"https://{endpoint_url}")
+    domain = parsed.netloc
+    scheme = parsed.scheme or "https"
+    if not domain:
+        raise ValueError(f"Cannot parse endpoint_url: {endpoint_url}")
+
+    auth = HuaweiAuthClient(
+        domain=domain, client_id=client_id, client_secret=client_secret, scheme=scheme
+    )
+    return HuaweiBatteryClient(domain=domain, auth=auth, scheme=scheme)
 
 
 @router.get("", response_model=BatteryListResponse)
@@ -96,6 +137,20 @@ async def update_battery(
     return BatteryResponse.model_validate(battery)
 
 
+@router.delete("/{battery_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_battery(
+    battery_id: UUID,
+    db: DbSession,
+    _user: CurrentUser,
+) -> None:
+    """Remove a battery from the fleet (does not delete historical readings)."""
+    battery = await db.get(Battery, battery_id)
+    if not battery:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Battery not found")
+    await db.delete(battery)
+    await db.flush()
+
+
 @router.post("/{battery_id}/dispatch", response_model=DispatchCommandResponse)
 async def send_dispatch_command(
     battery_id: UUID,
@@ -121,3 +176,162 @@ async def send_dispatch_command(
     return DispatchCommandResponse(
         command_id=command_id, battery_id=battery_id, power_kw=command.power_kw
     )
+
+
+# ---------------------------------------------------------------------------
+# Discovery & bulk import — Huawei FusionSolar
+# ---------------------------------------------------------------------------
+
+
+@router.post("/discover/huawei", response_model=HuaweiDiscoverResponse)
+async def discover_huawei(
+    payload: HuaweiDiscoverRequest,
+    _user: CurrentUser,
+) -> HuaweiDiscoverResponse:
+    """Query a Huawei FusionSolar endpoint (or simulator) and list all batteries.
+
+    Does **not** persist anything — only returns a catalog the operator can
+    then submit via POST /batteries/bulk-import.
+    """
+    client = _build_huawei_client(payload.endpoint_url, payload.client_id, payload.client_secret)
+
+    try:
+        plants = await client.get_plant_list()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Huawei endpoint error: {exc}",
+        ) from exc
+
+    discovered: list[DiscoveredBattery] = []
+    for plant in plants:
+        try:
+            devices = await client.get_device_list(plant.plant_code)
+        except Exception:
+            continue
+        for dev in devices:
+            # Default specs if the device doesn't expose them: use plant capacity.
+            capacity_kwh = Decimal(str(plant.capacity_kwh or 0))
+            # Heuristic: max power = capacity / 2 hours (0.5C rate) when unknown.
+            max_power_kw = (
+                Decimal(str(plant.capacity_kw)) if plant.capacity_kw else capacity_kwh / 2
+            )
+            discovered.append(
+                DiscoveredBattery(
+                    plant_code=plant.plant_code,
+                    plant_name=plant.plant_name,
+                    device_id=dev.device_id,
+                    model=dev.model,
+                    capacity_kwh=capacity_kwh,
+                    max_power_kw=max_power_kw,
+                )
+            )
+
+    return HuaweiDiscoverResponse(
+        data=discovered, meta={"count": len(discovered), "endpoint": payload.endpoint_url}
+    )
+
+
+@router.post("/bulk-import", response_model=BulkImportResponse)
+async def bulk_import_batteries(
+    payload: BulkImportRequest,
+    db: DbSession,
+    _user: CurrentUser,
+) -> BulkImportResponse:
+    """Insert a list of discovered Huawei batteries into the fleet.
+
+    Skips silently any battery whose asset_id already exists (idempotent).
+    """
+    parsed = urlparse(payload.endpoint_url if "://" in payload.endpoint_url else f"https://{payload.endpoint_url}")
+    host = parsed.hostname or ""
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    # Pre-fetch existing asset_ids to skip duplicates in a single query
+    existing_result = await db.execute(
+        select(Battery.asset_id).where(
+            Battery.asset_id.in_([b.asset_id for b in payload.batteries])
+        )
+    )
+    existing: set[str] = {row[0] for row in existing_result}
+
+    created_ids: list[UUID] = []
+    skipped = 0
+
+    for item in payload.batteries:
+        if item.asset_id in existing:
+            skipped += 1
+            continue
+
+        metadata: dict[str, Any] = {
+            "subtype": "huawei_fusion_solar",
+            "endpoint_url": payload.endpoint_url,
+            "plant_code": item.plant_code,
+            "device_id": item.device_id,
+            "model": item.model,
+            "client_id": payload.client_id,
+            # SECURITY: in real deployments, store this in Secrets Manager and
+            # reference it here rather than persisting plain text.
+            "client_secret": payload.client_secret,
+        }
+
+        battery = Battery(
+            battery_id=uuid4(),
+            asset_id=item.asset_id,
+            site_id=item.site_id,
+            name=item.name,
+            protocol=BatteryProtocol.REST,
+            host=host,
+            port=port,
+            capacity_kwh=item.capacity_kwh,
+            max_power_kw=item.max_power_kw,
+            metadata_=metadata,
+        )
+        db.add(battery)
+        await db.flush()
+        created_ids.append(battery.battery_id)
+
+    return BulkImportResponse(imported=len(created_ids), skipped=skipped, battery_ids=created_ids)
+
+
+@router.post("/{battery_id}/test-connection")
+async def test_connection(
+    battery_id: UUID,
+    db: DbSession,
+    _user: CurrentUser,
+) -> dict[str, Any]:
+    """Ping a battery via its configured connector and return current KPIs."""
+    battery = await db.get(Battery, battery_id)
+    if not battery:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Battery not found")
+
+    meta = battery.metadata_ or {}
+    subtype = meta.get("subtype")
+
+    if battery.protocol != BatteryProtocol.REST or subtype != "huawei_fusion_solar":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"test-connection only supports Huawei FusionSolar (got {subtype})",
+        )
+
+    client = _build_huawei_client(
+        meta["endpoint_url"], meta["client_id"], meta["client_secret"]
+    )
+    try:
+        statuses = await client.get_battery_realtime(
+            device_ids=[meta["device_id"]], plant_code=meta["plant_code"]
+        )
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if not statuses:
+        return {"ok": False, "error": "No data returned for device"}
+
+    s = statuses[0]
+    return {
+        "ok": True,
+        "soc_percent": s.soc,
+        "power_kw": s.power_kw,
+        "voltage_v": s.voltage_v,
+        "temperature_c": s.temperature_c,
+        "soh": s.soh,
+    }

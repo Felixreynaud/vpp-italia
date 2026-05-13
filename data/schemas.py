@@ -39,6 +39,13 @@ class BatteryBase(BaseModel):
     min_soc_percent: Decimal = Field(default=Decimal("10.0"), ge=0, le=100)
     max_soc_percent: Decimal = Field(default=Decimal("90.0"), ge=0, le=100)
     ramp_rate_kw_per_min: Decimal | None = Field(default=None, gt=0)
+    metadata_: dict[str, Any] | None = Field(
+        default=None,
+        alias="metadata",
+        description="Connector-specific config (plant_code, credentials, …)",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
 
     @field_validator("max_soc_percent")
     @classmethod
@@ -61,10 +68,13 @@ class BatteryUpdate(BaseModel):
     min_soc_percent: Decimal | None = Field(default=None, ge=0, le=100)
     max_soc_percent: Decimal | None = Field(default=None, ge=0, le=100)
     ramp_rate_kw_per_min: Decimal | None = None
+    metadata_: dict[str, Any] | None = Field(default=None, alias="metadata")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class BatteryResponse(BatteryBase):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     battery_id: UUID
     state: BatteryState
@@ -76,6 +86,61 @@ class BatteryResponse(BatteryBase):
 class BatteryListResponse(BaseModel):
     data: list[BatteryResponse]
     meta: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Connector discovery & bulk import (Huawei FusionSolar etc.)
+# ---------------------------------------------------------------------------
+
+
+class HuaweiDiscoverRequest(BaseModel):
+    """Credentials to query a Huawei FusionSolar endpoint (real or simulator)."""
+
+    endpoint_url: str = Field(
+        ..., description="Base URL e.g. http://127.0.0.1:9999 (simulator) or https://intl.fusionsolar.huawei.com"
+    )
+    client_id: str = Field(..., max_length=128)
+    client_secret: str = Field(..., max_length=256)
+
+
+class DiscoveredBattery(BaseModel):
+    plant_code: str
+    plant_name: str
+    device_id: str
+    model: str | None = None
+    capacity_kwh: Decimal
+    max_power_kw: Decimal
+
+
+class HuaweiDiscoverResponse(BaseModel):
+    data: list[DiscoveredBattery]
+    meta: dict[str, Any]
+
+
+class BulkImportItem(BaseModel):
+    """One battery from a discovery response, augmented with VPP-side params."""
+
+    asset_id: str = Field(..., max_length=64)
+    site_id: UUID
+    name: str = Field(..., max_length=128)
+    plant_code: str
+    device_id: str
+    model: str | None = None
+    capacity_kwh: Decimal
+    max_power_kw: Decimal
+
+
+class BulkImportRequest(BaseModel):
+    endpoint_url: str
+    client_id: str
+    client_secret: str
+    batteries: list[BulkImportItem]
+
+
+class BulkImportResponse(BaseModel):
+    imported: int
+    skipped: int
+    battery_ids: list[UUID]
 
 
 # ---------------------------------------------------------------------------

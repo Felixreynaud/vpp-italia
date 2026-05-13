@@ -37,10 +37,17 @@ class HuaweiAuthClient:
 
     AUTH_PATH = "/rest/openapi/pvms/nbi/v1/auth/token"
 
-    def __init__(self, domain: str, client_id: str, client_secret: str) -> None:
+    def __init__(
+        self,
+        domain: str,
+        client_id: str,
+        client_secret: str,
+        scheme: str = "https",
+    ) -> None:
         self._domain = domain
         self._client_id = client_id
         self._client_secret = client_secret
+        self._scheme = scheme
         self._cache: _CachedToken | None = None
         self._lock: asyncio.Lock = asyncio.Lock()
 
@@ -73,7 +80,7 @@ class HuaweiAuthClient:
         return self._cache is not None and time.monotonic() < self._cache.expires_at - 60
 
     async def _fetch(self) -> str:
-        url = f"https://{self._domain}{self.AUTH_PATH}"
+        url = f"{self._scheme}://{self._domain}{self.AUTH_PATH}"
         logger.debug("huawei.auth.fetching_token", domain=self._domain)
 
         try:
