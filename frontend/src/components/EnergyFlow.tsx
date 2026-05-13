@@ -20,7 +20,8 @@ export function EnergyFlow({ metrics }: EnergyFlowProps) {
     return Math.max(0.5, 3 - (absPower / maxPower) * 2.5);
   }, [absPower]);
 
-  const arrowColor = isCharging ? '#3b82f6' : isDischarging ? '#22c55e' : '#64748b';
+  // Charge en vert (success), Décharge en bleu (primary).
+  const arrowColor = isCharging ? '#22c55e' : isDischarging ? '#3b82f6' : '#64748b';
   const arrowLabel = isCharging
     ? `Charge ${absPower.toFixed(0)} kW`
     : isDischarging

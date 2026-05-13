@@ -90,7 +90,7 @@ export function BatteryCard({ battery, onCommandSent }: BatteryCardProps) {
       <div className="flex items-center gap-3 text-xs">
         <div className="flex items-center gap-1 text-slate-400">
           <Zap className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
-          <span className={battery.power_kw > 0 ? 'text-primary' : battery.power_kw < 0 ? 'text-success' : 'text-slate-400'}>
+          <span className={battery.power_kw > 0 ? 'text-success' : battery.power_kw < 0 ? 'text-primary' : 'text-slate-400'}>
             {battery.power_kw > 0 ? '+' : ''}{battery.power_kw.toFixed(0)} kW
           </span>
         </div>
