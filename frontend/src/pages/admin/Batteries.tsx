@@ -6,7 +6,7 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
-  CircleArrowDown,
+  Download,
 } from 'lucide-react';
 import {
   bulkSetBatteryActive,
@@ -118,7 +118,7 @@ export function AdminBatteries() {
             onClick={() => setImportOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/80 text-sm font-medium transition-colors"
           >
-            <CircleArrowDown className="w-4 h-4" />
+            <Download className="w-4 h-4" />
             Importer du portefeuille
           </button>
         </div>

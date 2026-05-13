@@ -6,7 +6,7 @@ import {
   Check,
   AlertCircle,
   Loader2,
-  IdCard,
+  Fingerprint,
   Cpu,
   Sliders,
   MapPin,
@@ -235,7 +235,7 @@ function buildConnection(form: FormState, plantCode: string) {
         client_id: form.huawei_client_id,
         client_secret: form.huawei_client_secret,
         connection_params: {
-          type: 'huawei_fusion_solar',
+          type: 'huawei_fusion_solar' as const,
           plant_code: plantCode,
           poll_interval_seconds: form.poll_interval_seconds,
         },
@@ -251,7 +251,7 @@ function buildConnection(form: FormState, plantCode: string) {
         client_id: '',
         client_secret: '',
         connection_params: {
-          type: 'modbus_tcp',
+          type: 'modbus_tcp' as const,
           unit_id: form.modbus_unit_id,
           timeout_s: form.modbus_timeout_s,
           poll_interval_seconds: form.poll_interval_seconds,
@@ -269,7 +269,7 @@ function buildConnection(form: FormState, plantCode: string) {
         client_id: form.ocpp_charge_point_id,
         client_secret: form.ocpp_auth_token,
         connection_params: {
-          type: 'ocpp_2_0_1',
+          type: 'ocpp_2_0_1' as const,
           ws_url: form.ocpp_ws_url,
           charge_point_id: form.ocpp_charge_point_id,
           auth_token: form.ocpp_auth_token,
@@ -296,7 +296,7 @@ function buildConnection(form: FormState, plantCode: string) {
         client_id: form.rest_auth_scheme === 'basic' ? form.rest_credential.split(':')[0] ?? '' : '',
         client_secret: form.rest_credential,
         connection_params: {
-          type: 'rest_generic',
+          type: 'rest_generic' as const,
           base_url: form.rest_base_url,
           auth_scheme: form.rest_auth_scheme,
           credential: form.rest_credential,
@@ -319,7 +319,7 @@ function deriveUuidFromString(str: string): string {
 }
 
 const STEPS = [
-  { id: 'identity', label: 'Identité', icon: IdCard },
+  { id: 'identity', label: 'Identité', icon: Fingerprint },
   { id: 'connection', label: 'Connexion', icon: Link2 },
   { id: 'tech', label: 'Specs', icon: Cpu },
   { id: 'operational', label: 'Opérationnels', icon: Sliders },
