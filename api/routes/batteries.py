@@ -253,6 +253,26 @@ async def send_dispatch_command(
                 detail=f"Huawei dispatch failed: {exc}",
             ) from exc
 
+        # Immediately re-read the state so the frontend sees the new state
+        # without waiting for the next 10-second poller cycle.
+        try:
+            from data.models import BatteryState
+
+            statuses = await client.get_battery_realtime(
+                device_ids=[meta["device_id"]], plant_code=plant_code
+            )
+            if statuses:
+                s = statuses[0]
+                if s.power_kw > 0.1:
+                    battery.state = BatteryState.CHARGING
+                elif s.power_kw < -0.1:
+                    battery.state = BatteryState.DISCHARGING
+                else:
+                    battery.state = BatteryState.IDLE
+                await db.flush()
+        except Exception:
+            pass  # state will get refreshed by the next poller cycle anyway
+
         return DispatchCommandResponse(
             command_id=task.request_id,
             battery_id=battery_id,
