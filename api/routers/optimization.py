@@ -6,16 +6,17 @@ import base64
 import csv
 import io
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Body, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import CurrentUser, DbSession
-from core.dispatch.models import BatterySpec
+from core.dispatch.models import BatterySpec, DailySchedule
 from core.optimization.arbitrage import ArbitrageInput, ArbitrageOptimizer
 from core.optimization.peak_shaving import PeakShavingInput, PeakShavingOptimizer
 from core.optimization.scenarios import SCENARIOS, ScenarioType
@@ -25,6 +26,36 @@ from data.models import Battery
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/optimize", tags=["optimization"])
+
+
+# ---------------------------------------------------------------------------
+# Pydantic request schemas — JSON body, frontend-friendly
+# ---------------------------------------------------------------------------
+
+
+class AutoconsommationPayload(BaseModel):
+    site_id: UUID
+    production_pv_kw: list[float] = Field(..., min_length=24, max_length=24)
+    consommation_kw: list[float] = Field(..., min_length=24, max_length=24)
+    prix_mgp: list[float] = Field(..., min_length=24, max_length=24)
+
+
+class ArbitragePayload(BaseModel):
+    site_id: UUID
+    prix_mgp: list[float] = Field(..., min_length=24, max_length=24)
+    mode: Literal["conservateur", "standard", "agressif"] = "standard"
+
+
+class StochastiquePayload(BaseModel):
+    site_id: UUID
+    prix_mgp_base: list[float] = Field(..., min_length=24, max_length=24)
+    incertitude_pct: float = Field(default=20.0, ge=0.0, le=100.0)
+    n_scenarios: int = Field(default=20, ge=5, le=200)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 async def _fetch_battery_specs(db: AsyncSession, site_id: UUID) -> list[BatterySpec]:
@@ -51,35 +82,44 @@ def _battery_to_spec(b: Battery) -> BatterySpec:
     )
 
 
-def _validate_24h(values: list[float], field_name: str) -> None:
-    if len(values) != 24:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"{field_name} must have exactly 24 values, got {len(values)}",
-        )
+def _schedule_to_hourly_list(
+    schedule_kw: list[float] | DailySchedule,
+) -> list[dict[str, float | int]]:
+    """Convert any of the optimisers' schedule shapes to the simple
+    [{hour, power_kw}] list expected by the frontend.
+
+    Convention: positive = discharge, negative = charge (matches DispatchCommand).
+    """
+    if isinstance(schedule_kw, list):
+        return [{"hour": h, "power_kw": float(kw)} for h, kw in enumerate(schedule_kw)]
+
+    # DailySchedule case — sum batteries per hour
+    out: list[dict[str, float | int]] = []
+    for h in range(24):
+        hs = schedule_kw.hours.get(h)
+        out.append({"hour": h, "power_kw": float(hs.total_power_kw) if hs else 0.0})
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.post("/autoconsommation")
 async def optimize_autoconsommation(
-    site_id: UUID,
-    production_pv_kw: list[float],
-    consommation_kw: list[float],
-    prix_mgp: list[float],
+    payload: AutoconsommationPayload,
     db: DbSession,
     _user: CurrentUser,
 ) -> dict[str, Any]:
     """Run peak-shaving / self-consumption optimisation for a site."""
-    _validate_24h(production_pv_kw, "production_pv_kw")
-    _validate_24h(consommation_kw, "consommation_kw")
-    _validate_24h(prix_mgp, "prix_mgp")
-
-    batteries = await _fetch_battery_specs(db, site_id)
+    batteries = await _fetch_battery_specs(db, payload.site_id)
     bat = batteries[0]
     inp = PeakShavingInput(
-        production_pv_kw=production_pv_kw,
-        consommation_site_kw=consommation_kw,
-        prix_mgp=prix_mgp,
-        soc_initial_pct=bat.initial_soc_pct,
+        production_pv_kw=payload.production_pv_kw,
+        consommation_site_kw=payload.consommation_kw,
+        prix_mgp=payload.prix_mgp,
+        soc_initial_pct=50.0,
         capacite_kwh=bat.capacity_kwh,
         puissance_max_kw=bat.max_power_kw,
         soc_min_pct=bat.soc_min_pct,
@@ -89,97 +129,86 @@ async def optimize_autoconsommation(
 
     logger.info(
         "optimize.autoconsommation",
-        site_id=str(site_id),
+        site_id=str(payload.site_id),
         taux_pct=result.taux_autoconsommation_pct,
         economie_eur=result.economie_estimee_eur,
     )
     return {
         "data": {
-            "schedule": result.schedule_kw,
-            "soc_evolution_pct": result.soc_evolution_pct,
-            "surplus_pv_kw": result.surplus_pv_kw,
-            "achat_reseau_kw": result.achat_reseau_kw,
-            "taux_autoconsommation": result.taux_autoconsommation_pct,
-            "economie_eur": result.economie_estimee_eur,
+            "schedule": _schedule_to_hourly_list(result.schedule_kw),
+            "revenus_estimes_eur": float(result.economie_estimee_eur),
+            "taux_autoconsommation_pct": float(result.taux_autoconsommation_pct),
+            "scenario": "autoconsommation",
         },
-        "meta": {"site_id": str(site_id), "batteries": len(batteries), **result.metadata},
+        "meta": {"site_id": str(payload.site_id), "batteries": len(batteries), **result.metadata},
     }
 
 
 @router.post("/arbitrage")
 async def optimize_arbitrage(
-    site_id: UUID,
+    payload: ArbitragePayload,
     db: DbSession,
     _user: CurrentUser,
-    prix_mgp: Annotated[list[float], Body()],
-    mode: Annotated[str, Query()] = "standard",
 ) -> dict[str, Any]:
     """Run MGP arbitrage optimisation with CVaR/Sharpe risk metrics."""
-    _validate_24h(prix_mgp, "prix_mgp")
-    if mode not in ("conservateur", "standard", "agressif"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="mode must be one of: conservateur, standard, agressif",
-        )
-
-    batteries = await _fetch_battery_specs(db, site_id)
-    inp = ArbitrageInput(prix_mgp=prix_mgp, batteries=batteries, mode=mode)
+    batteries = await _fetch_battery_specs(db, payload.site_id)
+    inp = ArbitrageInput(prix_mgp=payload.prix_mgp, batteries=batteries, mode=payload.mode)
     result = ArbitrageOptimizer().optimize(inp)
 
     logger.info(
         "optimize.arbitrage",
-        site_id=str(site_id),
-        mode=mode,
+        site_id=str(payload.site_id),
+        mode=payload.mode,
         revenu_eur=result.revenu_estime_eur,
         sharpe=result.sharpe_ratio,
     )
     return {
         "data": {
-            "schedule": result.schedule.to_dict(),
-            "revenu_estime_eur": result.revenu_estime_eur,
-            "sharpe_ratio": result.sharpe_ratio,
-            "cvar": result.cvar_95_eur,
+            "schedule": _schedule_to_hourly_list(result.schedule),
+            "revenus_estimes_eur": float(result.revenu_estime_eur),
+            "sharpe_ratio": float(result.sharpe_ratio),
+            "cvar": float(result.cvar_95_eur),
+            "scenario": "arbitrage",
         },
-        "meta": {"site_id": str(site_id), "mode": mode, **result.metadata},
+        "meta": {"site_id": str(payload.site_id), "mode": payload.mode, **result.metadata},
     }
 
 
 @router.post("/stochastique")
 async def optimize_stochastique(
-    site_id: UUID,
+    payload: StochastiquePayload,
     db: DbSession,
     _user: CurrentUser,
-    prix_mgp_base: Annotated[list[float], Body()],
-    incertitude_pct: Annotated[float, Query(ge=0.0, le=100.0)] = 20.0,
-    n_scenarios: Annotated[int, Query(ge=5, le=200)] = 20,
 ) -> dict[str, Any]:
     """Run scenario-based robust optimisation."""
-    _validate_24h(prix_mgp_base, "prix_mgp_base")
-
-    batteries = await _fetch_battery_specs(db, site_id)
+    batteries = await _fetch_battery_specs(db, payload.site_id)
     inp = StochasticInput(
-        prix_mgp_base=prix_mgp_base,
+        prix_mgp_base=payload.prix_mgp_base,
         batteries=batteries,
-        n_scenarios=n_scenarios,
-        incertitude_pct=incertitude_pct,
+        n_scenarios=payload.n_scenarios,
+        incertitude_pct=payload.incertitude_pct,
     )
     result = StochasticOptimizer().optimize(inp)
 
     logger.info(
         "optimize.stochastique",
-        site_id=str(site_id),
-        n_scenarios=n_scenarios,
+        site_id=str(payload.site_id),
+        n_scenarios=payload.n_scenarios,
         revenu_espere=result.revenu_espere_eur,
         risque_p95=result.risque_p95_eur,
     )
     return {
         "data": {
-            "schedule_robuste": result.schedule_robuste.to_dict(),
-            "revenu_espere_eur": result.revenu_espere_eur,
-            "risque_p95_eur": result.risque_p95_eur,
-            "scenarios_revenus": result.scenarios_revenus,
+            "schedule": _schedule_to_hourly_list(result.schedule_robuste),
+            "revenus_estimes_eur": float(result.revenu_espere_eur),
+            "cvar": float(result.risque_p95_eur),
+            "scenario": "stochastique",
         },
-        "meta": {"site_id": str(site_id), **result.metadata},
+        "meta": {
+            "site_id": str(payload.site_id),
+            "n_scenarios": payload.n_scenarios,
+            **result.metadata,
+        },
     }
 
 
