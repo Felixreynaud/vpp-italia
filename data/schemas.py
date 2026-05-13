@@ -39,13 +39,12 @@ class BatteryBase(BaseModel):
     min_soc_percent: Decimal = Field(default=Decimal("10.0"), ge=0, le=100)
     max_soc_percent: Decimal = Field(default=Decimal("90.0"), ge=0, le=100)
     ramp_rate_kw_per_min: Decimal | None = Field(default=None, gt=0)
+    # Field name uses trailing underscore to avoid clashing with SQLAlchemy
+    # Base.metadata; the underlying DB column is still "metadata".
     metadata_: dict[str, Any] | None = Field(
         default=None,
-        alias="metadata",
         description="Connector-specific config (plant_code, credentials, …)",
     )
-
-    model_config = ConfigDict(populate_by_name=True)
 
     @field_validator("max_soc_percent")
     @classmethod
@@ -68,13 +67,11 @@ class BatteryUpdate(BaseModel):
     min_soc_percent: Decimal | None = Field(default=None, ge=0, le=100)
     max_soc_percent: Decimal | None = Field(default=None, ge=0, le=100)
     ramp_rate_kw_per_min: Decimal | None = None
-    metadata_: dict[str, Any] | None = Field(default=None, alias="metadata")
-
-    model_config = ConfigDict(populate_by_name=True)
+    metadata_: dict[str, Any] | None = Field(default=None)
 
 
 class BatteryResponse(BatteryBase):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True)
 
     battery_id: UUID
     state: BatteryState
