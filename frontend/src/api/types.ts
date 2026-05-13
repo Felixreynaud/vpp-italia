@@ -121,6 +121,152 @@ export interface DispatchSession {
 }
 
 // ---------------------------------------------------------------------------
+// Battery catalogue (Huawei LUNA2000) — used to pre-fill the create form
+// ---------------------------------------------------------------------------
+
+export interface BatteryModelInfo {
+  name: string;
+  tier: 'residential' | 'commercial' | 'industrial';
+  capacity_kwh: number;
+  max_power_kw: number;
+  chemistry: string;
+  nominal_voltage_v: number;
+  cycles_guaranteed: number;
+  soh_initial_pct: number;
+  round_trip_efficiency_pct: number;
+  temp_min_c: number;
+  temp_max_c: number;
+}
+
+// ---------------------------------------------------------------------------
+// Battery metadata — organised by category
+// ---------------------------------------------------------------------------
+
+export type GmeZone = 'NORD' | 'CSUD' | 'CNOR' | 'SUD' | 'SARD' | 'SICI' | 'CALA';
+export type ContractType = 'BSP' | 'lease' | 'autoconsommation' | 'hybride';
+export type SiteType = 'residential' | 'commercial' | 'industrial';
+export type Strategy = 'autoconsommation' | 'arbitrage' | 'stochastique';
+export type Criticality = 'low' | 'medium' | 'high';
+export type DefaultMode = 'idle' | 'auto' | 'manual';
+
+export interface IdentityMeta {
+  serial_number?: string;
+  manufacturer?: string;
+  model?: string;
+  installation_date?: string;
+  warranty_end_date?: string;
+  commissioning_certificate_url?: string;
+}
+
+export interface TechSpecsMeta {
+  chemistry?: string;
+  nominal_voltage_v?: number;
+  cycles_guaranteed?: number;
+  soh_initial_pct?: number;
+  soh_current_pct?: number;
+  round_trip_efficiency_pct?: number;
+  temp_min_c?: number;
+  temp_max_c?: number;
+}
+
+export interface OperationalMeta {
+  target_idle_soc_pct?: number;
+  default_mode?: DefaultMode;
+  dispatch_priority?: number;
+}
+
+export interface LocationMeta {
+  address?: string;
+  city?: string;
+  postal_code?: string;
+  region?: string;
+  gme_zone?: GmeZone;
+  latitude?: number;
+  longitude?: number;
+  pod_code?: string;
+  dso?: string;
+}
+
+export interface CustomerMeta {
+  name?: string;
+  vat_number?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contract_type?: ContractType;
+  contract_start_date?: string;
+  contract_end_date?: string;
+  revenue_share_pct?: number;
+}
+
+export interface ProductionMeta {
+  has_pv?: boolean;
+  pv_capacity_kwc?: number;
+  site_type?: SiteType;
+  annual_consumption_mwh?: number;
+  peak_demand_kw?: number;
+}
+
+export interface MarketMeta {
+  eligible_mgp?: boolean;
+  eligible_msd?: boolean;
+  eligible_mb?: boolean;
+  terna_qualification_status?: string;
+  default_strategy?: Strategy;
+  min_sell_price_eur_mwh?: number;
+  max_buy_price_eur_mwh?: number;
+  risk_tolerance?: number;
+}
+
+export interface MaintenanceMeta {
+  last_maintenance_date?: string;
+  next_maintenance_due?: string;
+  maintenance_contract_id?: string;
+  criticality_level?: Criticality;
+}
+
+export interface ComplianceMeta {
+  gaudi_code?: string;
+  cei_certification?: string;
+  last_compliance_test_date?: string;
+  data_retention_audit_url?: string;
+}
+
+export interface BatteryMetadata {
+  subtype?: string;
+  endpoint_url?: string;
+  plant_code?: string;
+  device_id?: string;
+  client_id?: string;
+  client_secret?: string;
+  model?: string;
+
+  identity?: IdentityMeta;
+  tech_specs?: TechSpecsMeta;
+  operational?: OperationalMeta;
+  location?: LocationMeta;
+  customer?: CustomerMeta;
+  production?: ProductionMeta;
+  market?: MarketMeta;
+  maintenance?: MaintenanceMeta;
+  compliance?: ComplianceMeta;
+}
+
+export interface CreateBatteryRequest {
+  asset_id: string;
+  site_id: string;
+  name: string;
+  protocol: BatteryProtocol;
+  host: string;
+  port: number;
+  capacity_kwh: number;
+  max_power_kw: number;
+  min_soc_percent?: number;
+  max_soc_percent?: number;
+  ramp_rate_kw_per_min?: number | null;
+  metadata_: BatteryMetadata;
+}
+
+// ---------------------------------------------------------------------------
 // Admin — configured batteries (DB-side, distinct from the runtime Battery type)
 // ---------------------------------------------------------------------------
 

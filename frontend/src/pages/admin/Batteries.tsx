@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw,
   Plus,
+  PlusCircle,
   Trash2,
   Activity,
   AlertCircle,
@@ -52,6 +54,7 @@ function stateColor(state: ConfiguredBattery['state']): string {
 }
 
 export function AdminBatteries() {
+  const navigate = useNavigate();
   const [batteries, setBatteries] = useState<ConfiguredBattery[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,10 +127,17 @@ export function AdminBatteries() {
           </button>
           <button
             onClick={() => setDiscoverOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/80 text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700/50 text-slate-200 hover:bg-slate-700 text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Découvrir & importer
+            Importer depuis FusionSolar
+          </button>
+          <button
+            onClick={() => navigate('/admin/batteries/new')}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-success text-white hover:bg-success/80 text-sm font-medium transition-colors"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Nouvelle batterie
           </button>
         </div>
       </header>

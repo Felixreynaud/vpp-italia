@@ -1,9 +1,11 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import type {
   Battery,
+  BatteryModelInfo,
   BulkImportItem,
   BulkImportResponse,
   ConfiguredBattery,
+  CreateBatteryRequest,
   DiscoverResponse,
   FleetMetrics,
   MGPPricesResponse,
@@ -294,6 +296,23 @@ export async function bulkImportBatteries(
 
 export async function deleteBattery(batteryId: string): Promise<void> {
   await axiosInstance.delete(`/api/v1/batteries/${batteryId}`);
+}
+
+export async function fetchBatteryModels(): Promise<BatteryModelInfo[]> {
+  const { data } = await axiosInstance.get<{ data: BatteryModelInfo[] }>(
+    '/api/v1/batteries/models'
+  );
+  return data.data;
+}
+
+export async function createBattery(
+  payload: CreateBatteryRequest
+): Promise<ConfiguredBattery> {
+  const { data } = await axiosInstance.post<ConfiguredBattery>(
+    '/api/v1/batteries',
+    payload
+  );
+  return data;
 }
 
 export async function testBatteryConnection(
