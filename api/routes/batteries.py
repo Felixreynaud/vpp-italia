@@ -69,7 +69,14 @@ async def list_batteries(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     cursor: Annotated[str | None, Query()] = None,
 ) -> BatteryListResponse:
-    """List all batteries, optionally filtered by site."""
+    """List all batteries, optionally filtered by site.
+
+    Each battery is enriched with the latest reading (soc_percent, power_kw,
+    temperature_c, …) when available — so a single GET is enough to render
+    the dashboard / battery cards.
+    """
+    from sqlalchemy import text
+
     query = select(Battery).order_by(Battery.battery_id).limit(limit + 1)
     if site_id:
         query = query.where(Battery.site_id == site_id)
@@ -84,9 +91,47 @@ async def list_batteries(
         batteries = batteries[:limit]
         next_cursor = str(batteries[-1].battery_id)
 
+    # Fetch latest reading per battery in one go (DISTINCT ON, last 10 minutes)
+    readings_map: dict[str, Any] = {}
+    if batteries:
+        battery_ids = [str(b.battery_id) for b in batteries]
+        readings_sql = text(
+            """
+            SELECT DISTINCT ON (battery_id)
+                battery_id, soc_percent, power_kw, voltage_v, current_a,
+                temperature_c, time
+            FROM battery_readings
+            WHERE time > NOW() - INTERVAL '10 minutes'
+              AND battery_id::text = ANY(:ids)
+            ORDER BY battery_id, time DESC
+            """
+        )
+        try:
+            rr = await db.execute(readings_sql, {"ids": battery_ids})
+            for row in rr:
+                readings_map[str(row.battery_id)] = row
+        except Exception:
+            # battery_readings may not exist yet — degrade gracefully
+            readings_map = {}
+
+    payload: list[BatteryResponse] = []
+    for b in batteries:
+        r = readings_map.get(str(b.battery_id))
+        item = BatteryResponse.model_validate(b)
+        if r is not None:
+            item.soc_percent = float(r.soc_percent) if r.soc_percent is not None else None
+            item.power_kw = float(r.power_kw) if r.power_kw is not None else None
+            item.voltage_v = float(r.voltage_v) if r.voltage_v is not None else None
+            item.current_a = float(r.current_a) if r.current_a is not None else None
+            item.temperature_c = (
+                float(r.temperature_c) if r.temperature_c is not None else None
+            )
+            item.last_seen = r.time
+        payload.append(item)
+
     return BatteryListResponse(
-        data=[BatteryResponse.model_validate(b) for b in batteries],
-        meta={"count": len(batteries), "next_cursor": next_cursor},
+        data=payload,
+        meta={"count": len(payload), "next_cursor": next_cursor},
     )
 
 

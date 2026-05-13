@@ -79,6 +79,15 @@ class BatteryResponse(BatteryBase):
     created_at: datetime
     updated_at: datetime
 
+    # Runtime values enriched from the latest BatteryReading (nullable when
+    # the battery has never reported yet).
+    soc_percent: float | None = None
+    power_kw: float | None = None
+    voltage_v: float | None = None
+    current_a: float | None = None
+    temperature_c: float | None = None
+    last_seen: datetime | None = None
+
 
 class BatteryListResponse(BaseModel):
     data: list[BatteryResponse]
