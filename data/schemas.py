@@ -7,7 +7,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from data.models import BatteryProtocol, BatteryState, DispatchSource, MarketName, OfferStatus
+from data.models import (
+    BatteryProtocol,
+    BatteryState,
+    DispatchSource,
+    MarketName,
+    OfferStatus,
+    UserRole,
+)
 
 T = TypeVar("T")
 
@@ -261,3 +268,83 @@ class MarketOfferResponse(BaseModel):
 class MarketOfferListResponse(BaseModel):
     data: list[MarketOfferResponse]
     meta: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# User schemas
+# ---------------------------------------------------------------------------
+
+
+class UserInvite(BaseModel):
+    """Payload sent by an admin to invite a new user."""
+
+    email: str = Field(..., max_length=255)
+    full_name: str = Field(..., max_length=128)
+    role: UserRole = UserRole.OPERATOR
+
+    @field_validator("email")
+    @classmethod
+    def email_must_contain_at(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("invalid email address")
+        return v
+
+
+class UserUpdate(BaseModel):
+    """Admin-side update (cannot change email or password here)."""
+
+    full_name: str | None = Field(default=None, max_length=128)
+    role: UserRole | None = None
+    is_active: bool | None = None
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    email: str
+    full_name: str
+    role: UserRole
+    is_active: bool
+    email_verified_at: datetime | None
+    last_login_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserListResponse(BaseModel):
+    data: list[UserResponse]
+    meta: dict[str, Any]
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., max_length=255)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=20, max_length=200)
+    new_password: str = Field(..., min_length=10, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("password must contain at least one digit")
+        return v
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=10, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("password must contain at least one digit")
+        return v
