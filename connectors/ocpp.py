@@ -101,7 +101,7 @@ class OCPPServer:
             self._on_connect,
             self._host,
             self._port,
-            subprotocols=["ocpp2.0.1"],  # type: ignore[list-item]
+            subprotocols=["ocpp2.0.1"],  # type: ignore[list-item, unused-ignore]
         ):
             await asyncio.Future()
 

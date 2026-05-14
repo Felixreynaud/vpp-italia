@@ -65,7 +65,10 @@ def login_lockout_duration() -> timedelta:
 
 def hash_password(password: str) -> str:
     secret = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
-    return bcrypt.hashpw(secret, bcrypt.gensalt()).decode("ascii")
+    # Explicit annotation works whether bcrypt's return type is `bytes` (with
+    # stubs) or `Any` (without stubs) — Any is silently compatible with `bytes`.
+    hashed: bytes = bcrypt.hashpw(secret, bcrypt.gensalt())
+    return hashed.decode("ascii")
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
@@ -74,7 +77,8 @@ def verify_password(password: str, password_hash: str | None) -> bool:
         return False
     secret = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
     try:
-        return bcrypt.checkpw(secret, password_hash.encode("ascii"))
+        ok: bool = bcrypt.checkpw(secret, password_hash.encode("ascii"))
+        return ok
     except (ValueError, TypeError):
         return False
 

@@ -48,7 +48,7 @@ async def read_battery(battery: Battery, timeout: float = 5.0) -> ModbusReading:
 
         result = await client.read_input_registers(REG_SOC, count=6, slave=1)
         if result.isError():
-            raise ModbusException(f"Read error: {result}")  # type: ignore[no-untyped-call]
+            raise ModbusException(f"Read error: {result}")  # type: ignore[no-untyped-call, unused-ignore]
 
         regs = result.registers
         raw = {"registers": list(regs), "address": REG_SOC, "count": 6}
@@ -83,7 +83,7 @@ async def send_power_setpoint(battery: Battery, power_kw: float, timeout: float 
 
         result = await client.write_register(REG_POWER_SETPOINT, register_value, slave=1)
         if result.isError():
-            raise ModbusException(f"Write error: {result}")  # type: ignore[no-untyped-call]
+            raise ModbusException(f"Write error: {result}")  # type: ignore[no-untyped-call, unused-ignore]
 
         logger.info(
             "modbus.setpoint_written",
