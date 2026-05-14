@@ -13,6 +13,7 @@ itself keeps running.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -46,10 +47,8 @@ class BatteryPoller:
         self._running = False
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info("battery_poller.stopped")
 

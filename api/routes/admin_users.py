@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -39,6 +39,9 @@ logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 _INVITE_TTL = timedelta(days=7)
+
+# Reusable annotated dependency — avoids B008 'function call in default'.
+AdminUserDep = Annotated[dict[str, Any], Depends(require_admin)]
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +220,7 @@ async def update_user(
     user_id: str,
     payload: UserUpdate,
     session: DbSession,
-    admin: dict[str, Any] = Depends(require_admin),
+    admin: AdminUserDep,
 ) -> Any:
     pk = _parse_user_id(user_id)
     user = await session.get(User, pk)
@@ -283,7 +286,7 @@ async def update_user(
 async def delete_user(
     user_id: str,
     session: DbSession,
-    admin: dict[str, Any] = Depends(require_admin),
+    admin: AdminUserDep,
 ) -> None:
     pk = _parse_user_id(user_id)
     user = await session.get(User, pk)

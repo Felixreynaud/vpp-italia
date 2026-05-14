@@ -1,5 +1,6 @@
 """Battery management endpoints."""
 
+import contextlib
 from decimal import Decimal
 from typing import Annotated, Any
 from urllib.parse import urlparse
@@ -8,6 +9,7 @@ from uuid import UUID, uuid4
 import httpx
 import structlog
 from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import delete, select
 
 from api.dependencies import CurrentUser, DbSession
@@ -352,9 +354,6 @@ async def create_battery(
 # ---------------------------------------------------------------------------
 
 
-from pydantic import BaseModel
-
-
 class BulkActivatePayload(BaseModel):
     battery_ids: list[UUID]
     active: bool = True
@@ -522,10 +521,8 @@ async def send_dispatch_command(
         plant_code = meta["plant_code"]
 
         # Ensure the plant is in thirdPartyDispatch mode (idempotent)
-        try:
+        with contextlib.suppress(Exception):
             await client.set_dispatch_mode(plant_code)
-        except Exception:
-            pass
 
         power_kw_abs = abs(float(command.power_kw))
         power_w = power_kw_abs * 1000.0

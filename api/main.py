@@ -1,5 +1,6 @@
 """VPP Italia — FastAPI application entry point."""
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -66,15 +67,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-import os as _os
-
 _default_origins = "http://localhost:3000,http://localhost:8080"
 _origins = [
     o.strip()
-    for o in _os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
+    for o in os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
     if o.strip()
 ]
-_origin_regex = _os.getenv("CORS_ALLOWED_ORIGIN_REGEX") or None
+_origin_regex = os.getenv("CORS_ALLOWED_ORIGIN_REGEX") or None
 
 app.add_middleware(
     CORSMiddleware,

@@ -28,8 +28,7 @@ from __future__ import annotations
 import os
 import secrets
 import time
-import uuid
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import Body, FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -272,8 +271,8 @@ async def auth_token(payload: AuthPayload) -> dict[str, Any]:
 
 @app.post("/thirdData/getStationList", tags=["thirdData"])
 async def get_station_list(
-    body: dict[str, Any] | None = Body(default=None),
-    xsrf_token: str | None = Header(default=None, alias="xsrf-token"),
+    body: Annotated[dict[str, Any] | None, Body()] = None,
+    xsrf_token: Annotated[str | None, Header(alias="xsrf-token")] = None,
 ) -> dict[str, Any]:
     _verify_token(xsrf_token)
     plants = await simulator.get_plant_list()
@@ -290,8 +289,8 @@ async def get_station_list(
 
 @app.post("/thirdData/getDevList", tags=["thirdData"])
 async def get_dev_list(
-    body: dict[str, Any] = Body(...),
-    xsrf_token: str | None = Header(default=None, alias="xsrf-token"),
+    body: Annotated[dict[str, Any], Body()],
+    xsrf_token: Annotated[str | None, Header(alias="xsrf-token")] = None,
 ) -> dict[str, Any]:
     _verify_token(xsrf_token)
     plant_code = body.get("stationCodes", "")
@@ -317,8 +316,8 @@ async def get_dev_list(
 
 @app.post("/thirdData/getDevRealKpi", tags=["thirdData"])
 async def get_dev_real_kpi(
-    body: dict[str, Any] = Body(...),
-    xsrf_token: str | None = Header(default=None, alias="xsrf-token"),
+    body: Annotated[dict[str, Any], Body()],
+    xsrf_token: Annotated[str | None, Header(alias="xsrf-token")] = None,
 ) -> dict[str, Any]:
     _verify_token(xsrf_token)
     raw_ids = body.get("devIds", "")
@@ -386,8 +385,8 @@ def _bearer_token(auth_header: str | None) -> str:
 
 @app.post("/rest/openapi/pvms/nbi/v1/control/battery/mode/async-task", tags=["control"])
 async def set_dispatch_mode(
-    body: dict[str, Any] = Body(...),
-    authorization: str | None = Header(default=None),
+    body: Annotated[dict[str, Any], Body()],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     _verify_token(_bearer_token(authorization))
     plant_codes = body.get("stationCodes") or []
@@ -405,8 +404,8 @@ async def set_dispatch_mode(
 
 @app.post("/rest/openapi/pvms/nbi/v2/control/charge-and-discharge/async-task", tags=["control"])
 async def charge_discharge(
-    body: dict[str, Any] = Body(...),
-    authorization: str | None = Header(default=None),
+    body: Annotated[dict[str, Any], Body()],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     _verify_token(_bearer_token(authorization))
     plant_codes = body.get("stationCodes") or []
@@ -436,8 +435,8 @@ async def charge_discharge(
 
 @app.post("/rest/openapi/pvms/v1/vpp/chargeAndDischargeStatus", tags=["control"])
 async def get_task_status(
-    body: dict[str, Any] = Body(...),
-    authorization: str | None = Header(default=None),
+    body: Annotated[dict[str, Any], Body()],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     _verify_token(_bearer_token(authorization))
     request_id = body.get("requestId", "")
