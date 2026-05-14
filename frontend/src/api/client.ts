@@ -1,6 +1,9 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import type {
   AdminUser,
+  Aggregate,
+  AggregateCreateRequest,
+  AggregateUpdateRequest,
   Battery,
   BatteryModelInfo,
   BulkImportItem,
@@ -492,6 +495,46 @@ export async function resendInvite(userId: string): Promise<AdminUser> {
     `/api/v1/admin/users/${userId}/resend-invite`
   );
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// Admin — battery aggregates (admin role required)
+// ---------------------------------------------------------------------------
+
+export async function listAggregates(): Promise<Aggregate[]> {
+  const { data } = await axiosInstance.get<{ data: Aggregate[] }>(
+    '/api/v1/admin/aggregates'
+  );
+  return data.data;
+}
+
+export async function createAggregate(req: AggregateCreateRequest): Promise<Aggregate> {
+  const { data } = await axiosInstance.post<Aggregate>('/api/v1/admin/aggregates', req);
+  return data;
+}
+
+export async function updateAggregate(
+  aggregateId: string,
+  req: AggregateUpdateRequest
+): Promise<Aggregate> {
+  const { data } = await axiosInstance.patch<Aggregate>(
+    `/api/v1/admin/aggregates/${aggregateId}`,
+    req
+  );
+  return data;
+}
+
+export async function deleteAggregate(aggregateId: string): Promise<void> {
+  await axiosInstance.delete(`/api/v1/admin/aggregates/${aggregateId}`);
+}
+
+export async function assignBatteryToAggregate(
+  batteryId: string,
+  aggregateId: string | null
+): Promise<void> {
+  await axiosInstance.patch(`/api/v1/admin/batteries/${batteryId}/aggregate`, {
+    aggregate_id: aggregateId,
+  });
 }
 
 export default axiosInstance;

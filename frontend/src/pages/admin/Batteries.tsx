@@ -15,6 +15,7 @@ import {
   testBatteryConnection,
 } from '../../api/client';
 import type { ConfiguredBattery, TestConnectionResponse } from '../../api/types';
+import { AggregatesSection } from '../../components/aggregates/AggregatesSection';
 
 function stateColor(state: ConfiguredBattery['state']): string {
   switch (state) {
@@ -123,6 +124,15 @@ export function AdminBatteries() {
           </button>
         </div>
       </header>
+
+      <AggregatesSection />
+
+      <div className="border-t border-border pt-6">
+        <h2 className="text-lg font-semibold text-white mb-1">Toutes les batteries actives</h2>
+        <p className="text-sm text-slate-400">
+          Liste detaillee. Glissez ces batteries dans les agregats ci-dessus pour leur appliquer une strategie.
+        </p>
+      </div>
 
       {error && (
         <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300">
