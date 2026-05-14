@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from data.models import (
+    AggregateStrategy,
     BatteryProtocol,
     BatteryState,
     DispatchSource,
@@ -378,3 +379,65 @@ class MGPPriceResponse(BaseModel):
 
     data: list[MGPPriceItem]
     meta: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Aggregate schemas
+# ---------------------------------------------------------------------------
+
+
+class AggregateBase(BaseModel):
+    name: str = Field(..., max_length=128)
+    description: str | None = Field(default=None, max_length=512)
+    strategy_type: AggregateStrategy = AggregateStrategy.ARBITRAGE_MGP
+    target_market: MarketName | None = None
+    target_zone: MGPZone | None = None
+    is_active: bool = True
+
+
+class AggregateCreate(AggregateBase):
+    pass
+
+
+class AggregateUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=128)
+    description: str | None = Field(default=None, max_length=512)
+    strategy_type: AggregateStrategy | None = None
+    target_market: MarketName | None = None
+    target_zone: MGPZone | None = None
+    is_active: bool | None = None
+
+
+class AggregateBatteryRef(BaseModel):
+    """Lightweight battery view inlined inside aggregate responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    battery_id: UUID
+    asset_id: str
+    name: str
+    capacity_kwh: Decimal
+    max_power_kw: Decimal
+
+
+class AggregateResponse(AggregateBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    aggregate_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    batteries: list[AggregateBatteryRef] = Field(default_factory=list)
+
+
+class AggregateListResponse(BaseModel):
+    data: list[AggregateResponse]
+    meta: dict[str, Any]
+
+
+class BatteryAggregateAssignment(BaseModel):
+    """Body for PATCH /admin/batteries/{id}/aggregate."""
+
+    aggregate_id: UUID | None = Field(
+        default=None,
+        description="Set null to unassign the battery from any aggregate.",
+    )

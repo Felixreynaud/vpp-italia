@@ -92,6 +92,19 @@ class MGPZone(StrEnum):
     PUN = "PUN"
 
 
+class AggregateStrategy(StrEnum):
+    """Optimization strategies that can be applied to an aggregate.
+
+    Only `ARBITRAGE_MGP` is wired to the actual optimizer for now.
+    Other values are reserved for future iterations.
+    """
+
+    ARBITRAGE_MGP = "arbitrage_mgp"
+    AUTOCONSOMMATION = "autoconsommation"
+    MSD = "msd"
+    STOCHASTIQUE = "stochastique"
+
+
 class Battery(Base):
     __tablename__ = "batteries"
 
@@ -111,6 +124,13 @@ class Battery(Base):
     ramp_rate_kw_per_min: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
     state: Mapped[BatteryState] = mapped_column(Enum(BatteryState), default=BatteryState.OFFLINE)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Optional grouping. NULL means "under management but not part of any
+    # aggregate" — battery is still controllable individually.
+    aggregate_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("aggregates.aggregate_id", ondelete="SET NULL"),
+        index=True,
+    )
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -119,6 +139,7 @@ class Battery(Base):
 
     readings = relationship("BatteryReading", back_populates="battery", lazy="dynamic")
     dispatch_plans = relationship("DispatchPlan", back_populates="battery", lazy="dynamic")
+    aggregate = relationship("Aggregate", back_populates="batteries")
 
 
 class BatteryReading(Base):
@@ -307,3 +328,32 @@ class MGPPrice(Base):
     zone: Mapped[MGPZone] = mapped_column(Enum(MGPZone), index=True)
     price_eur_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Aggregate(Base):
+    """Group of batteries sharing one optimization strategy.
+
+    Exclusive membership: each battery belongs to at most one aggregate
+    at a time (enforced by the FK column on Battery, no join table).
+    """
+
+    __tablename__ = "aggregates"
+
+    aggregate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    description: Mapped[str | None] = mapped_column(String(512))
+    strategy_type: Mapped[AggregateStrategy] = mapped_column(
+        Enum(AggregateStrategy), default=AggregateStrategy.ARBITRAGE_MGP
+    )
+    # Optional market target (MGP/MI/MSD/MB) — null = generic, configured later.
+    target_market: Mapped[MarketName | None] = mapped_column(Enum(MarketName))
+    target_zone: Mapped[MGPZone | None] = mapped_column(Enum(MGPZone))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    batteries = relationship("Battery", back_populates="aggregate", lazy="selectin")
