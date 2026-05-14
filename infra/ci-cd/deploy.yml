@@ -115,10 +115,13 @@ jobs:
               "echo 'Connexion SSH OK'"
 
       # Lancer le script de déploiement sur l'EC2
+      # ServerAliveInterval/CountMax : keepalive toutes les 30s, jusqu'a 60min.
       - name: Déployer l'application
         run: |
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=120 \
               ubuntu@${{ steps.get-ip.outputs.ec2_ip }} \
               "sudo /usr/local/bin/vpp-deploy"
 
