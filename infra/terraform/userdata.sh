@@ -228,6 +228,17 @@ sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.t
 echo "[deploy] Run migrations..."
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/alembic" -c "$APP_DIR/alembic.ini" upgrade head || true
 
+echo "[deploy] Rebuild frontend..."
+if [ -d "$APP_DIR/frontend" ]; then
+    cd "$APP_DIR/frontend"
+    sudo -u "$APP_USER" npm install --silent --no-audit --no-fund
+    sudo -u "$APP_USER" npm run build
+    cd "$APP_DIR"
+    echo "[deploy] Frontend rebuilt in $APP_DIR/frontend/dist"
+else
+    echo "[deploy] WARN: $APP_DIR/frontend missing, skipping build"
+fi
+
 echo "[deploy] Restart service..."
 systemctl restart vpp-api
 systemctl status vpp-api --no-pager
