@@ -16,6 +16,7 @@ from api.routers.optimization import router as optimization_router
 from api.routes import admin_users, auth, batteries, dashboard, dispatch, markets, metrics
 from core.battery_polling import BatteryPoller
 from core.dispatch_applier import DispatchApplier
+from core.market.mgp_scheduler import MGPPriceScheduler
 from core.scheduler import MarketScheduler
 
 logger = structlog.get_logger(__name__)
@@ -23,11 +24,12 @@ logger = structlog.get_logger(__name__)
 _scheduler: MarketScheduler | None = None
 _battery_poller: BatteryPoller | None = None
 _dispatch_applier: DispatchApplier | None = None
+_mgp_scheduler: MGPPriceScheduler | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global _scheduler, _battery_poller, _dispatch_applier
+    global _scheduler, _battery_poller, _dispatch_applier, _mgp_scheduler
 
     logger.info("vpp.startup", version=app.version)
     await init_db()
@@ -42,9 +44,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _dispatch_applier = DispatchApplier(session_factory=factory)
     await _dispatch_applier.start()
 
+    _mgp_scheduler = MGPPriceScheduler(session_factory=factory)
+    await _mgp_scheduler.start()
+
     yield
 
     logger.info("vpp.shutdown")
+    if _mgp_scheduler:
+        await _mgp_scheduler.stop()
     if _dispatch_applier:
         await _dispatch_applier.stop()
     if _battery_poller:

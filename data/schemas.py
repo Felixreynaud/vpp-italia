@@ -12,6 +12,7 @@ from data.models import (
     BatteryState,
     DispatchSource,
     MarketName,
+    MGPZone,
     OfferStatus,
     UserRole,
 )
@@ -349,3 +350,31 @@ class PasswordChangeRequest(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError("password must contain at least one digit")
         return v
+
+
+# ---------------------------------------------------------------------------
+# MGP Day-Ahead price schemas
+# ---------------------------------------------------------------------------
+
+
+class MGPPriceItem(BaseModel):
+    """A single MGP price slot."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    delivery_date: str
+    hour: int = Field(..., ge=0, le=23)
+    zone: MGPZone
+    price_eur_mwh: Decimal
+
+
+class MGPPriceResponse(BaseModel):
+    """Response for GET /api/v1/markets/mgp/prices.
+
+    `prices` is the 24-hour curve for the requested (zone, date), in
+    chronological order. `meta` carries the count and possibly metadata
+    about the source (fetched_at).
+    """
+
+    data: list[MGPPriceItem]
+    meta: dict[str, Any]

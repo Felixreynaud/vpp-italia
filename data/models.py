@@ -75,6 +75,23 @@ class PasswordResetPurpose(StrEnum):
     RESET = "reset"
 
 
+class MGPZone(StrEnum):
+    """Italian Day-Ahead market zones published by GME.
+
+    PUN is the national weighted average price (not a zone per se, but
+    treated as one for storage convenience).
+    """
+
+    NORD = "NORD"
+    CNOR = "CNOR"
+    CSUD = "CSUD"
+    SUD = "SUD"
+    CALA = "CALA"
+    SARD = "SARD"
+    SICI = "SICI"
+    PUN = "PUN"
+
+
 class Battery(Base):
     __tablename__ = "batteries"
 
@@ -267,3 +284,26 @@ class PasswordResetToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="reset_tokens")
+
+
+class MGPPrice(Base):
+    """Italian Day-Ahead spot price published by GME (Gestore dei Mercati Energetici).
+
+    One row per (delivery_date, hour, zone). Published every day at ~12:00
+    Europe/Rome for the next delivery day. 8 zones (7 + PUN) × 24 hours =
+    192 rows per fetch. Unique constraint enforces idempotency of inserts.
+    """
+
+    __tablename__ = "mgp_prices"
+    __table_args__ = (UniqueConstraint("delivery_date", "hour", "zone", name="uq_mgp_prices_slot"),)
+
+    # Integer (not BigInteger) for portable autoincrement: SQLite only auto-
+    # increments INTEGER PRIMARY KEY. 70k rows/year × 30 years << 2 billion.
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    delivery_date: Mapped[str] = mapped_column(
+        String(10), index=True, comment="YYYY-MM-DD in Europe/Rome"
+    )
+    hour: Mapped[int] = mapped_column(Integer, comment="0-23, Europe/Rome local hour")
+    zone: Mapped[MGPZone] = mapped_column(Enum(MGPZone), index=True)
+    price_eur_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

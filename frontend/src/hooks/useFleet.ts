@@ -10,7 +10,7 @@ interface UseFleetReturn {
   refresh: () => void;
 }
 
-export function useFleet(pollingIntervalMs = 10000): UseFleetReturn {
+export function useFleet(pollingIntervalMs = 10000, zone = 'NORD'): UseFleetReturn {
   const [metrics, setMetrics] = useState<FleetMetrics | null>(null);
   const [mgpPrices, setMgpPrices] = useState<MGPPrice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,7 +18,7 @@ export function useFleet(pollingIntervalMs = 10000): UseFleetReturn {
 
   const load = useCallback(async () => {
     try {
-      const [m, p] = await Promise.all([fetchFleetMetrics(), fetchMGPPrices()]);
+      const [m, p] = await Promise.all([fetchFleetMetrics(), fetchMGPPrices(zone)]);
       setMetrics(m);
       setMgpPrices(p.prices);
       setError(null);
@@ -28,7 +28,7 @@ export function useFleet(pollingIntervalMs = 10000): UseFleetReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [zone]);
 
   useEffect(() => {
     void load();

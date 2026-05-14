@@ -243,9 +243,36 @@ export async function fetchFleetMetrics(): Promise<FleetMetrics> {
   return data.data;
 }
 
-export async function fetchMGPPrices(): Promise<MGPPricesResponse> {
-  if (MOCK_DATA) return getMockMGPPrices();
-  const { data } = await axiosInstance.get<{ data: MGPPricesResponse }>('/api/v1/markets/mgp/prices');
+export async function fetchMGPPrices(
+  zone: string = 'NORD',
+  deliveryDate?: string,
+): Promise<MGPPricesResponse> {
+  if (MOCK_DATA) return { ...getMockMGPPrices(), zone, delivery_date: deliveryDate };
+  const params: Record<string, string> = { zone };
+  if (deliveryDate) params.delivery_date = deliveryDate;
+  const { data } = await axiosInstance.get<{ data: MGPPricesResponse }>(
+    '/api/v1/markets/mgp/prices',
+    { params },
+  );
+  return data.data;
+}
+
+export async function fetchMGPZones(): Promise<Array<{ code: string; label: string }>> {
+  if (MOCK_DATA) {
+    return [
+      { code: 'NORD', label: 'NORD' },
+      { code: 'CNOR', label: 'CNOR' },
+      { code: 'CSUD', label: 'CSUD' },
+      { code: 'SUD', label: 'SUD' },
+      { code: 'CALA', label: 'CALA' },
+      { code: 'SARD', label: 'SARD' },
+      { code: 'SICI', label: 'SICI' },
+      { code: 'PUN', label: 'PUN' },
+    ];
+  }
+  const { data } = await axiosInstance.get<{ data: Array<{ code: string; label: string }> }>(
+    '/api/v1/markets/mgp/zones',
+  );
   return data.data;
 }
 

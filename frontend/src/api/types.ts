@@ -34,6 +34,8 @@ export interface FleetMetrics {
   pnl_jour_eur?: number;
 }
 
+export type MGPZone = 'NORD' | 'CNOR' | 'CSUD' | 'SUD' | 'CALA' | 'SARD' | 'SICI' | 'PUN';
+
 export interface MGPPrice {
   hour: number;
   price_eur_mwh: number;
@@ -41,6 +43,13 @@ export interface MGPPrice {
 
 export interface MGPPricesResponse {
   prices: MGPPrice[];
+  zone?: MGPZone | string;
+  delivery_date?: string;
+}
+
+export interface MGPZoneInfo {
+  code: MGPZone;
+  label: string;
 }
 
 export type OptimizeScenario = 'autoconsommation' | 'arbitrage' | 'stochastique';
