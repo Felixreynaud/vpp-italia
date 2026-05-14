@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Activity, AlertCircle, Loader2 } from 'lucide-react';
 import { login } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 
 export function Login() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { refresh } = useAuth();
   const [username, setUsername] = useState('');
@@ -22,7 +24,7 @@ export function Login() {
       await refresh();
       void navigate('/');
     } catch {
-      setError('Identifiants invalides. Veuillez reessayer.');
+      setError(t('login.invalid_credentials'));
     } finally {
       setLoading(false);
     }
@@ -36,13 +38,13 @@ export function Login() {
             <Activity className="w-7 h-7 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-white">VPP Italia</h1>
-          <p className="text-sm text-slate-400 mt-1">Pannello Operatore</p>
+          <p className="text-sm text-slate-400 mt-1">{t('login.subtitle')}</p>
         </div>
         <form
           onSubmit={(e) => { void handleSubmit(e); }}
           className="bg-surface rounded-2xl border border-border p-6 space-y-4"
         >
-          <h2 className="text-lg font-semibold text-white text-center">Connexion</h2>
+          <h2 className="text-lg font-semibold text-white text-center">{t('login.title')}</h2>
           {error && (
             <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -50,21 +52,25 @@ export function Login() {
             </div>
           )}
           <div className="space-y-1">
-            <label htmlFor="username" className="block text-sm font-medium text-slate-300">Nom d'utilisateur</label>
+            <label htmlFor="username" className="block text-sm font-medium text-slate-300">
+              {t('login.username_label')}
+            </label>
             <input
               id="username" type="text" autoComplete="username" required
               value={username} onChange={(e) => setUsername(e.target.value)}
               className="w-full px-3 py-2.5 rounded-lg bg-background border border-border text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-              placeholder="operatore"
+              placeholder={t('login.username_placeholder')}
             />
           </div>
           <div className="space-y-1">
-            <label htmlFor="password" className="block text-sm font-medium text-slate-300">Mot de passe</label>
+            <label htmlFor="password" className="block text-sm font-medium text-slate-300">
+              {t('login.password_label')}
+            </label>
             <input
               id="password" type="password" autoComplete="current-password" required
               value={password} onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2.5 rounded-lg bg-background border border-border text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-              placeholder="••••••••"
+              placeholder={t('login.password_placeholder')}
             />
           </div>
           <button
@@ -72,15 +78,22 @@ export function Login() {
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
             aria-busy={loading}
           >
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />Connexion...</> : 'Se connecter'}
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                {t('login.submitting')}
+              </>
+            ) : (
+              t('login.submit')
+            )}
           </button>
           <p className="text-center pt-1">
             <Link to="/forgot-password" className="text-sm text-primary hover:underline">
-              Mot de passe oublie ?
+              {t('login.forgot_password')}
             </Link>
           </p>
         </form>
-        <p className="text-center text-xs text-slate-500 mt-4">VPP Italia v0.1 — Environnement securise</p>
+        <p className="text-center text-xs text-slate-500 mt-4">{t('login.footer')}</p>
       </div>
     </div>
   );

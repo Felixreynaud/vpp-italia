@@ -1,0 +1,107 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "back": "Retour",
+    "refresh": "Rafraichir",
+    "language": "Langue",
+    "minute_short": "min"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "optimize": "Optimisation",
+    "batteries": "Activations batteries",
+    "history": "Historique",
+    "admin_batteries": "Management batterie",
+    "portfolio": "Portefeuille batteries",
+    "users": "Utilisateurs",
+    "account": "Mon compte",
+    "logout": "Deconnexion"
+  },
+  "login": {
+    "title": "Connexion",
+    "subtitle": "Pannello Operatore",
+    "username_label": "Nom d'utilisateur",
+    "username_placeholder": "operatore",
+    "password_label": "Mot de passe",
+    "password_placeholder": "********",
+    "submit": "Se connecter",
+    "submitting": "Connexion...",
+    "invalid_credentials": "Identifiants invalides. Veuillez reessayer.",
+    "forgot_password": "Mot de passe oublie ?",
+    "footer": "VPP Italia v0.1 — Environnement securise"
+  },
+  "forgot_password": {
+    "title": "Mot de passe oublie",
+    "subtitle": "Reinitialisation du mot de passe",
+    "instruction": "Entrez votre adresse email pour recevoir un lien de reinitialisation.",
+    "email_label": "Email",
+    "email_placeholder": "vous@exemple.com",
+    "submit": "Envoyer le lien",
+    "submitting": "Envoi...",
+    "success_title": "Verifiez votre boite mail",
+    "success_message": "Si un compte est associe a {{email}}, vous recevrez un lien pour reinitialiser votre mot de passe d'ici quelques minutes.",
+    "expires_hint": "Le lien expire dans 1 heure.",
+    "back_to_login": "Retour a la connexion"
+  },
+  "reset_password": {
+    "title": "Nouveau mot de passe",
+    "subtitle": "Definir un nouveau mot de passe",
+    "new_password_label": "Nouveau mot de passe",
+    "confirm_label": "Confirmer",
+    "submit": "Enregistrer le mot de passe",
+    "submitting": "Enregistrement...",
+    "hint": "10 caracteres minimum, dont au moins une majuscule et un chiffre.",
+    "success_title": "Mot de passe enregistre",
+    "success_message": "Vous allez etre redirige vers la page de connexion...",
+    "errors": {
+      "token_missing": "Lien invalide : token manquant.",
+      "too_short": "Le mot de passe doit faire au moins 10 caracteres.",
+      "no_uppercase": "Le mot de passe doit contenir au moins une majuscule.",
+      "no_digit": "Le mot de passe doit contenir au moins un chiffre.",
+      "mismatch": "La confirmation ne correspond pas.",
+      "invalid_token": "Lien invalide ou expire. Demandez-en un nouveau.",
+      "weak": "Mot de passe trop faible.",
+      "unexpected": "Erreur inattendue. Reessayez plus tard."
+    }
+  },
+  "account": {
+    "title": "Mon compte",
+    "subtitle": "Profil utilisateur et gestion du mot de passe.",
+    "profile": "Profil",
+    "loading_profile": "Chargement...",
+    "load_error": "Impossible de charger votre profil.",
+    "fields": {
+      "email": "Email",
+      "full_name": "Nom complet",
+      "role": "Role",
+      "status": "Statut",
+      "active": "Actif",
+      "inactive": "Inactif"
+    },
+    "change_password": "Changer le mot de passe",
+    "current_password_label": "Mot de passe actuel",
+    "new_password_label": "Nouveau mot de passe",
+    "confirm_password_label": "Confirmer le nouveau mot de passe",
+    "password_hint": "10 caracteres minimum, dont au moins une majuscule et un chiffre.",
+    "update_password": "Mettre a jour le mot de passe",
+    "submitting": "Enregistrement...",
+    "password_updated": "Mot de passe mis a jour.",
+    "errors": {
+      "current_required": "Le mot de passe actuel est requis.",
+      "too_short": "Le nouveau mot de passe doit faire au moins 10 caracteres.",
+      "no_uppercase": "Le nouveau mot de passe doit contenir au moins une majuscule.",
+      "no_digit": "Le nouveau mot de passe doit contenir au moins un chiffre.",
+      "same_as_current": "Le nouveau mot de passe doit etre different de l'actuel.",
+      "mismatch": "La confirmation ne correspond pas.",
+      "weak": "Mot de passe trop faible.",
+      "unexpected": "Impossible de modifier le mot de passe."
+    },
+    "language_section": "Langue",
+    "language_hint": "Le changement prend effet immediatement."
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "refresh": "Refresh",
+    "language": "Language",
+    "minute_short": "min"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "optimize": "Optimization",
+    "batteries": "Battery activations",
+    "history": "History",
+    "admin_batteries": "Battery management",
+    "portfolio": "Battery portfolio",
+    "users": "Users",
+    "account": "My account",
+    "logout": "Logout"
+  },
+  "login": {
+    "title": "Sign in",
+    "subtitle": "Operator panel",
+    "username_label": "Username",
+    "username_placeholder": "operator",
+    "password_label": "Password",
+    "password_placeholder": "********",
+    "submit": "Sign in",
+    "submitting": "Signing in...",
+    "invalid_credentials": "Invalid credentials. Please try again.",
+    "forgot_password": "Forgot password?",
+    "footer": "VPP Italia v0.1 — Secure environment"
+  },
+  "forgot_password": {
+    "title": "Forgot password",
+    "subtitle": "Password reset",
+    "instruction": "Enter your email to receive a reset link.",
+    "email_label": "Email",
+    "email_placeholder": "you@example.com",
+    "submit": "Send link",
+    "submitting": "Sending...",
+    "success_title": "Check your mailbox",
+    "success_message": "If an account is associated with {{email}}, you will receive a password reset link within a few minutes.",
+    "expires_hint": "The link expires in 1 hour.",
+    "back_to_login": "Back to sign in"
+  },
+  "reset_password": {
+    "title": "New password",
+    "subtitle": "Set a new password",
+    "new_password_label": "New password",
+    "confirm_label": "Confirm",
+    "submit": "Save password",
+    "submitting": "Saving...",
+    "hint": "At least 10 characters, including one uppercase letter and one digit.",
+    "success_title": "Password saved",
+    "success_message": "You will be redirected to the sign-in page...",
+    "errors": {
+      "token_missing": "Invalid link: token missing.",
+      "too_short": "Password must be at least 10 characters.",
+      "no_uppercase": "Password must contain at least one uppercase letter.",
+      "no_digit": "Password must contain at least one digit.",
+      "mismatch": "Confirmation does not match.",
+      "invalid_token": "Invalid or expired link. Request a new one.",
+      "weak": "Password too weak.",
+      "unexpected": "Unexpected error. Please try again later."
+    }
+  },
+  "account": {
+    "title": "My account",
+    "subtitle": "User profile and password management.",
+    "profile": "Profile",
+    "loading_profile": "Loading...",
+    "load_error": "Unable to load your profile.",
+    "fields": {
+      "email": "Email",
+      "full_name": "Full name",
+      "role": "Role",
+      "status": "Status",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "change_password": "Change password",
+    "current_password_label": "Current password",
+    "new_password_label": "New password",
+    "confirm_password_label": "Confirm new password",
+    "password_hint": "At least 10 characters, including one uppercase letter and one digit.",
+    "update_password": "Update password",
+    "submitting": "Saving...",
+    "password_updated": "Password updated.",
+    "errors": {
+      "current_required": "Current password is required.",
+      "too_short": "New password must be at least 10 characters.",
+      "no_uppercase": "New password must contain at least one uppercase letter.",
+      "no_digit": "New password must contain at least one digit.",
+      "same_as_current": "New password must differ from the current one.",
+      "mismatch": "Confirmation does not match.",
+      "weak": "Password too weak.",
+      "unexpected": "Unable to change password."
+    },
+    "language_section": "Language",
+    "language_hint": "Change takes effect immediately."
+  }
+}

@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Activity, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { confirmPasswordReset } from '../api/client';
 
 export function ResetPassword() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token') ?? '';
@@ -15,11 +17,11 @@ export function ResetPassword() {
   const [success, setSuccess] = useState(false);
 
   const validate = (): string | null => {
-    if (!token) return 'Lien invalide : token manquant.';
-    if (newPassword.length < 10) return 'Le mot de passe doit faire au moins 10 caracteres.';
-    if (!/[A-Z]/.test(newPassword)) return 'Le mot de passe doit contenir au moins une majuscule.';
-    if (!/[0-9]/.test(newPassword)) return 'Le mot de passe doit contenir au moins un chiffre.';
-    if (newPassword !== confirmPassword) return 'La confirmation ne correspond pas.';
+    if (!token) return t('reset_password.errors.token_missing');
+    if (newPassword.length < 10) return t('reset_password.errors.too_short');
+    if (!/[A-Z]/.test(newPassword)) return t('reset_password.errors.no_uppercase');
+    if (!/[0-9]/.test(newPassword)) return t('reset_password.errors.no_digit');
+    if (newPassword !== confirmPassword) return t('reset_password.errors.mismatch');
     return null;
   };
 
@@ -40,11 +42,11 @@ export function ResetPassword() {
       const apiError = e as { response?: { status?: number; data?: { detail?: string } } };
       const status = apiError.response?.status;
       if (status === 400) {
-        setError('Lien invalide ou expire. Demandez-en un nouveau.');
+        setError(t('reset_password.errors.invalid_token'));
       } else if (status === 422) {
-        setError('Mot de passe trop faible.');
+        setError(t('reset_password.errors.weak'));
       } else {
-        setError('Erreur inattendue. Reessayez plus tard.');
+        setError(t('reset_password.errors.unexpected'));
       }
     } finally {
       setSubmitting(false);
@@ -59,7 +61,7 @@ export function ResetPassword() {
             <Activity className="w-7 h-7 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-white">VPP Italia</h1>
-          <p className="text-sm text-slate-400 mt-1">Definir un nouveau mot de passe</p>
+          <p className="text-sm text-slate-400 mt-1">{t('reset_password.subtitle')}</p>
         </div>
 
         <div className="bg-surface rounded-2xl border border-border p-6">
@@ -68,14 +70,14 @@ export function ResetPassword() {
               <div className="flex justify-center">
                 <CheckCircle2 className="w-10 h-10 text-success" />
               </div>
-              <h2 className="text-lg font-semibold text-white">Mot de passe enregistre</h2>
+              <h2 className="text-lg font-semibold text-white">{t('reset_password.success_title')}</h2>
               <p className="text-sm text-slate-400">
-                Vous allez etre redirige vers la page de connexion...
+                {t('reset_password.success_message')}
               </p>
             </div>
           ) : (
             <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
-              <h2 className="text-lg font-semibold text-white text-center">Nouveau mot de passe</h2>
+              <h2 className="text-lg font-semibold text-white text-center">{t('reset_password.title')}</h2>
 
               {error && (
                 <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger text-sm">
@@ -85,7 +87,7 @@ export function ResetPassword() {
 
               <div className="space-y-1">
                 <label htmlFor="new_password" className="block text-sm font-medium text-slate-300">
-                  Nouveau mot de passe
+                  {t('reset_password.new_password_label')}
                 </label>
                 <input
                   id="new_password"
@@ -96,12 +98,12 @@ export function ResetPassword() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-lg bg-background border border-border text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
                 />
-                <p className="text-xs text-slate-500">10 caracteres minimum, dont au moins une majuscule et un chiffre.</p>
+                <p className="text-xs text-slate-500">{t('reset_password.hint')}</p>
               </div>
 
               <div className="space-y-1">
                 <label htmlFor="confirm_password" className="block text-sm font-medium text-slate-300">
-                  Confirmer
+                  {t('reset_password.confirm_label')}
                 </label>
                 <input
                   id="confirm_password"
@@ -121,15 +123,15 @@ export function ResetPassword() {
                 aria-busy={submitting}
               >
                 {submitting ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {t('reset_password.submitting')}</>
                 ) : (
-                  'Enregistrer le mot de passe'
+                  t('reset_password.submit')
                 )}
               </button>
 
               <p className="text-center">
                 <Link to="/login" className="text-sm text-primary hover:underline">
-                  Retour a la connexion
+                  {t('forgot_password.back_to_login')}
                 </Link>
               </p>
             </form>
