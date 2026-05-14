@@ -102,6 +102,29 @@ JWT_SECRET=$(aws ssm get-parameter \
     --region "$AWS_REGION" \
     --query Parameter.Value --output text 2>/dev/null || echo "changeme-set-in-ssm")
 
+# Auth/email config (added in the user-management rollout). Each fallback keeps
+# the API operational even if a single parameter is missing.
+ADMIN_DEFAULT_EMAIL=$(aws ssm get-parameter \
+    --name "$SSM_PREFIX/admin-default-email" \
+    --region "$AWS_REGION" \
+    --query Parameter.Value --output text 2>/dev/null || echo "admin@vpp-italia.local")
+
+ADMIN_DEFAULT_PASSWORD=$(aws ssm get-parameter \
+    --name "$SSM_PREFIX/admin-default-password" \
+    --with-decryption \
+    --region "$AWS_REGION" \
+    --query Parameter.Value --output text 2>/dev/null || echo "")
+
+FRONTEND_BASE_URL=$(aws ssm get-parameter \
+    --name "$SSM_PREFIX/frontend-base-url" \
+    --region "$AWS_REGION" \
+    --query Parameter.Value --output text 2>/dev/null || echo "http://localhost:3000")
+
+CORS_ALLOWED_ORIGINS=$(aws ssm get-parameter \
+    --name "$SSM_PREFIX/cors-allowed-origins" \
+    --region "$AWS_REGION" \
+    --query Parameter.Value --output text 2>/dev/null || echo "http://localhost:3000,http://localhost:8080")
+
 cat > "$APP_DIR/.env" <<ENV
 APP_ENV=$ENVIRONMENT
 DATABASE_URL=$DB_URL
@@ -111,6 +134,11 @@ AWS_S3_BUCKET_LOGS=$S3_LOGS_BUCKET
 AWS_S3_BUCKET_BACKUPS=$S3_BACKUPS_BUCKET
 TIMEZONE=Europe/Rome
 LOG_LEVEL=INFO
+ADMIN_DEFAULT_EMAIL=$ADMIN_DEFAULT_EMAIL
+ADMIN_DEFAULT_PASSWORD=$ADMIN_DEFAULT_PASSWORD
+FRONTEND_BASE_URL=$FRONTEND_BASE_URL
+CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS
+EMAIL_BACKEND=console
 ENV
 chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"

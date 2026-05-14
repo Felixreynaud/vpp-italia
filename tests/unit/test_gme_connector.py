@@ -25,6 +25,15 @@ ENV = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _set_gme_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep env vars available beyond the `with patch.dict(...)` constructor scope:
+    GMEClient reads GME_API_USERNAME / GME_API_PASSWORD lazily in `_authenticate()`
+    (after the `with` has exited), so the values must remain set throughout the test."""
+    for k, v in ENV.items():
+        monkeypatch.setenv(k, v)
+
+
 def make_offer(
     market: str = "MGP",
     direction: str = "UP",

@@ -73,8 +73,8 @@ async def test_autoconsommation_success(client, db_session) -> None:
 
     resp = await client.post(
         f"{BASE}/autoconsommation",
-        params={"site_id": str(site_id)},
         json={
+            "site_id": str(site_id),
             "production_pv_kw": PROD_24,
             "consommation_kw": CONS_24,
             "prix_mgp": PRICES_24,
@@ -95,8 +95,8 @@ async def test_autoconsommation_wrong_length_returns_422(client, db_session) -> 
 
     resp = await client.post(
         f"{BASE}/autoconsommation",
-        params={"site_id": str(site_id)},
         json={
+            "site_id": str(site_id),
             "production_pv_kw": [1.0] * 10,
             "consommation_kw": CONS_24,
             "prix_mgp": PRICES_24,
@@ -110,8 +110,8 @@ async def test_autoconsommation_wrong_length_returns_422(client, db_session) -> 
 async def test_autoconsommation_no_batteries_returns_404(client) -> None:
     resp = await client.post(
         f"{BASE}/autoconsommation",
-        params={"site_id": str(uuid.uuid4())},
         json={
+            "site_id": str(uuid.uuid4()),
             "production_pv_kw": PROD_24,
             "consommation_kw": CONS_24,
             "prix_mgp": PRICES_24,
@@ -133,14 +133,13 @@ async def test_arbitrage_success(client, db_session) -> None:
 
     resp = await client.post(
         f"{BASE}/arbitrage",
-        params={"site_id": str(site_id)},
-        json=PRICES_24,
+        json={"site_id": str(site_id), "prix_mgp": PRICES_24},
         headers=AUTH,
     )
     assert resp.status_code == 200
     body = resp.json()
     assert "data" in body
-    assert "revenu_estime_eur" in body["data"]
+    assert "revenus_estimes_eur" in body["data"]
 
 
 @pytest.mark.asyncio
@@ -150,8 +149,7 @@ async def test_arbitrage_conservateur_mode(client, db_session) -> None:
 
     resp = await client.post(
         f"{BASE}/arbitrage",
-        params={"site_id": str(site_id), "mode": "conservateur"},
-        json=PRICES_24,
+        json={"site_id": str(site_id), "prix_mgp": PRICES_24, "mode": "conservateur"},
         headers=AUTH,
     )
     assert resp.status_code == 200
@@ -164,8 +162,7 @@ async def test_arbitrage_invalid_mode_returns_422(client, db_session) -> None:
 
     resp = await client.post(
         f"{BASE}/arbitrage",
-        params={"site_id": str(site_id), "mode": "turbo"},
-        json=PRICES_24,
+        json={"site_id": str(site_id), "prix_mgp": PRICES_24, "mode": "turbo"},
         headers=AUTH,
     )
     assert resp.status_code == 422
@@ -178,8 +175,7 @@ async def test_arbitrage_wrong_length_returns_422(client, db_session) -> None:
 
     resp = await client.post(
         f"{BASE}/arbitrage",
-        params={"site_id": str(site_id)},
-        json=[50.0] * 12,
+        json={"site_id": str(site_id), "prix_mgp": [50.0] * 12},
         headers=AUTH,
     )
     assert resp.status_code == 422
@@ -197,13 +193,17 @@ async def test_stochastique_success(client, db_session) -> None:
 
     resp = await client.post(
         f"{BASE}/stochastique",
-        params={"site_id": str(site_id), "n_scenarios": 5},
-        json=PRICES_24,
+        json={
+            "site_id": str(site_id),
+            "prix_mgp_base": PRICES_24,
+            "n_scenarios": 5,
+        },
         headers=AUTH,
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert "revenu_espere_eur" in body["data"]
+    assert "revenus_estimes_eur" in body["data"]
+    assert "cvar" in body["data"]
 
 
 @pytest.mark.asyncio
@@ -213,8 +213,7 @@ async def test_stochastique_wrong_length_returns_422(client, db_session) -> None
 
     resp = await client.post(
         f"{BASE}/stochastique",
-        params={"site_id": str(site_id)},
-        json=[50.0] * 5,
+        json={"site_id": str(site_id), "prix_mgp_base": [50.0] * 5},
         headers=AUTH,
     )
     assert resp.status_code == 422
