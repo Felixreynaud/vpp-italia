@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Activity, AlertCircle, Loader2 } from 'lucide-react';
 import { login } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 export function Login() {
   const navigate = useNavigate();
+  const { refresh } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,6 +19,7 @@ export function Login() {
     try {
       const resp = await login({ username, password });
       localStorage.setItem('vpp_token', resp.access_token);
+      await refresh();
       void navigate('/');
     } catch {
       setError('Identifiants invalides. Veuillez reessayer.');

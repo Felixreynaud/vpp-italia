@@ -12,28 +12,44 @@ import {
   Settings,
   FolderOpen,
   UserCircle,
+  Users,
 } from 'lucide-react';
 import { useCETClock } from '../hooks/useCETClock';
+import { useAuth } from '../hooks/useAuth';
 import { logout } from '../api/client';
 
-const NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  adminOnly?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/optimize', label: 'Optimisation', icon: Zap },
   { to: '/batteries', label: 'Activations batteries', icon: Battery },
   { to: '/history', label: 'Historique', icon: BarChart2 },
   { to: '/admin/batteries', label: 'Management batterie', icon: Settings },
   { to: '/portfolio', label: 'Portefeuille batteries', icon: FolderOpen },
+  { to: '/admin/users', label: 'Utilisateurs', icon: Users, adminOnly: true },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const cetTime = useCETClock();
+  const { user, clear } = useAuth();
 
   const handleLogout = async () => {
     await logout();
+    clear();
     void navigate('/login');
   };
+
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => !item.adminOnly || user?.role === 'admin'
+  );
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -70,7 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1" aria-label="Pages">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {visibleNavItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

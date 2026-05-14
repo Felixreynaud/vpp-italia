@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import type {
+  AdminUser,
   Battery,
   BatteryModelInfo,
   BulkImportItem,
@@ -9,6 +10,7 @@ import type {
   CreateBatteryRequest,
   DiscoverResponse,
   FleetMetrics,
+  InviteUserRequest,
   MGPPricesResponse,
   OptimizeResult,
   AutoconsommationRequest,
@@ -23,6 +25,7 @@ import type {
   HistoryPoint,
   DispatchSession,
   TestConnectionResponse,
+  UpdateUserRequest,
   UserProfile,
 } from './types';
 
@@ -419,6 +422,47 @@ export async function testBatteryConnection(
 ): Promise<TestConnectionResponse> {
   const { data } = await axiosInstance.post<TestConnectionResponse>(
     `/api/v1/batteries/${batteryId}/test-connection`
+  );
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Admin — users management (admin role required)
+// ---------------------------------------------------------------------------
+
+export async function listUsers(): Promise<AdminUser[]> {
+  const { data } = await axiosInstance.get<{ data: AdminUser[] }>(
+    '/api/v1/admin/users'
+  );
+  return data.data;
+}
+
+export async function inviteUser(req: InviteUserRequest): Promise<AdminUser> {
+  const { data } = await axiosInstance.post<AdminUser>(
+    '/api/v1/admin/users/invite',
+    req
+  );
+  return data;
+}
+
+export async function updateUser(
+  userId: string,
+  req: UpdateUserRequest
+): Promise<AdminUser> {
+  const { data } = await axiosInstance.patch<AdminUser>(
+    `/api/v1/admin/users/${userId}`,
+    req
+  );
+  return data;
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await axiosInstance.delete(`/api/v1/admin/users/${userId}`);
+}
+
+export async function resendInvite(userId: string): Promise<AdminUser> {
+  const { data } = await axiosInstance.post<AdminUser>(
+    `/api/v1/admin/users/${userId}/resend-invite`
   );
   return data;
 }
