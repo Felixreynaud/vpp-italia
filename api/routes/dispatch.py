@@ -341,9 +341,7 @@ async def apply_dispatch_plan(
     the current time into a Huawei charge/discharge command per battery.
     """
     bats = await db.execute(
-        select(Battery)
-        .where(Battery.site_id == payload.site_id)
-        .where(Battery.is_active.is_(True))
+        select(Battery).where(Battery.site_id == payload.site_id).where(Battery.is_active.is_(True))
     )
     batteries = list(bats.scalars().all())
     if not batteries:

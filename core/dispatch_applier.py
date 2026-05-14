@@ -94,9 +94,7 @@ class DispatchApplier:
         if not rows:
             return
 
-        logger.debug(
-            "dispatch_applier.cycle_start", date=today_iso, qh=qh, candidates=len(rows)
-        )
+        logger.debug("dispatch_applier.cycle_start", date=today_iso, qh=qh, candidates=len(rows))
 
         sent = 0
         for plan, battery in rows:
@@ -114,10 +112,7 @@ class DispatchApplier:
     async def _apply_one(self, battery: Battery, plan: DispatchPlan) -> bool:
         meta = battery.metadata_ or {}
         subtype = meta.get("subtype")
-        if (
-            battery.protocol != BatteryProtocol.REST
-            or subtype != "huawei_fusion_solar"
-        ):
+        if battery.protocol != BatteryProtocol.REST or subtype != "huawei_fusion_solar":
             return False
 
         from api.routes.batteries import _build_huawei_client

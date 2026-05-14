@@ -111,9 +111,7 @@ async def test_login_success_returns_access_token_and_refresh_cookie(
 
 
 @pytest.mark.asyncio
-async def test_login_wrong_password_returns_401(
-    auth_client: AsyncClient, admin_user: User
-) -> None:
+async def test_login_wrong_password_returns_401(auth_client: AsyncClient, admin_user: User) -> None:
     resp = await auth_client.post(
         "/api/v1/auth/login",
         json={"email": "admin@example.com", "password": "wrong"},
@@ -304,9 +302,7 @@ async def test_logout_without_cookie_still_returns_200(auth_client: AsyncClient)
 
 
 @pytest.mark.asyncio
-async def test_me_returns_current_user_profile(
-    db_session: AsyncSession, admin_user: User
-) -> None:
+async def test_me_returns_current_user_profile(db_session: AsyncSession, admin_user: User) -> None:
     async def override_db():
         yield db_session
 
@@ -321,12 +317,8 @@ async def test_me_returns_current_user_profile(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
-            resp = await c.get(
-                "/api/v1/auth/me", headers={"Authorization": "Bearer fake"}
-            )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/auth/me", headers={"Authorization": "Bearer fake"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["email"] == "admin@example.com"
@@ -354,12 +346,8 @@ async def test_me_returns_401_for_inactive_user(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
-            resp = await c.get(
-                "/api/v1/auth/me", headers={"Authorization": "Bearer fake"}
-            )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/auth/me", headers={"Authorization": "Bearer fake"})
         assert resp.status_code == 401
     finally:
         app.dependency_overrides.clear()
@@ -371,9 +359,7 @@ async def test_me_returns_401_for_inactive_user(
 
 
 @pytest.mark.asyncio
-async def test_change_password_success(
-    db_session: AsyncSession, admin_user: User
-) -> None:
+async def test_change_password_success(db_session: AsyncSession, admin_user: User) -> None:
     async def override_db():
         yield db_session
 
@@ -388,9 +374,7 @@ async def test_change_password_success(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/v1/auth/change-password",
                 headers={"Authorization": "Bearer fake"},
@@ -427,9 +411,7 @@ async def test_change_password_wrong_current_returns_400(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/v1/auth/change-password",
                 headers={"Authorization": "Bearer fake"},
@@ -462,9 +444,7 @@ async def test_change_password_same_as_current_returns_400(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/v1/auth/change-password",
                 headers={"Authorization": "Bearer fake"},
@@ -499,9 +479,7 @@ async def test_change_password_weak_new_returns_422(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             # no uppercase
             resp = await c.post(
                 "/api/v1/auth/change-password",
@@ -514,9 +492,7 @@ async def test_change_password_weak_new_returns_422(
         assert resp.status_code == 422
 
         # no digit
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/v1/auth/change-password",
                 headers={"Authorization": "Bearer fake"},
@@ -528,9 +504,7 @@ async def test_change_password_weak_new_returns_422(
         assert resp.status_code == 422
 
         # too short
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post(
                 "/api/v1/auth/change-password",
                 headers={"Authorization": "Bearer fake"},
@@ -560,12 +534,8 @@ async def test_me_returns_401_for_unknown_user(db_session: AsyncSession) -> None
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
-            resp = await c.get(
-                "/api/v1/auth/me", headers={"Authorization": "Bearer fake"}
-            )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            resp = await c.get("/api/v1/auth/me", headers={"Authorization": "Bearer fake"})
         assert resp.status_code == 401
     finally:
         app.dependency_overrides.clear()
@@ -625,9 +595,7 @@ async def test_reset_request_ignores_inactive_user_silently(
 
 
 @pytest_asyncio.fixture
-async def reset_token_for_admin(
-    db_session: AsyncSession, admin_user: User
-) -> str:
+async def reset_token_for_admin(db_session: AsyncSession, admin_user: User) -> str:
     plain = security.generate_refresh_token()
     db_session.add(
         PasswordResetToken(

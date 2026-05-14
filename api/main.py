@@ -69,9 +69,7 @@ app = FastAPI(
 
 _default_origins = "http://localhost:3000,http://localhost:8080"
 _origins = [
-    o.strip()
-    for o in os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
-    if o.strip()
+    o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",") if o.strip()
 ]
 _origin_regex = os.getenv("CORS_ALLOWED_ORIGIN_REGEX") or None
 

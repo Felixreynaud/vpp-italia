@@ -145,16 +145,18 @@ async def sim_fleet() -> dict[str, Any]:
     for plant_code, plant in simulator._plants.items():
         bats = [b for b in simulator._batteries.values() if b.plant_code == plant_code]
         for bat in bats:
-            fleet.append({
-                "plant_code": plant_code,
-                "plant_name": plant.plant_name,
-                "device_id": bat.device_id,
-                "model": bat.model,
-                "capacity_kwh": bat.capacity_kwh,
-                "max_power_kw": bat.max_power_kw,
-                "soc": round(bat.soc, 1),
-                "current_power_kw": round(bat.current_power_kw, 2),
-            })
+            fleet.append(
+                {
+                    "plant_code": plant_code,
+                    "plant_name": plant.plant_name,
+                    "device_id": bat.device_id,
+                    "model": bat.model,
+                    "capacity_kwh": bat.capacity_kwh,
+                    "max_power_kw": bat.max_power_kw,
+                    "soc": round(bat.soc, 1),
+                    "current_power_kw": round(bat.current_power_kw, 2),
+                }
+            )
     return {"count": len(fleet), "fleet": fleet}
 
 
@@ -233,9 +235,7 @@ async def sim_list_models() -> dict[str, Any]:
                 "capacity_kwh": cap,
                 "max_power_kw": pwr,
                 "tier": (
-                    "residential" if cap < 50
-                    else "commercial" if cap < 200
-                    else "industrial"
+                    "residential" if cap < 50 else "commercial" if cap < 200 else "industrial"
                 ),
             }
             for name, (cap, pwr) in LUNA2000_MODELS.items()
@@ -352,19 +352,21 @@ async def get_dev_real_kpi(
         if bat is None:
             continue
         status = bat.to_status()
-        out.append({
-            "devDn": dev_id,
-            "devId": dev_id,
-            "dataItemMap": {
-                "battery_soc": status.soc,
-                "charge_discharge_power": status.power_kw,
-                "battery_voltage": status.voltage_v,
-                "battery_current": status.current_a,
-                "battery_temperature": status.temperature_c,
-                "battery_soh": status.soh,
-                "run_state": status.status,
-            },
-        })
+        out.append(
+            {
+                "devDn": dev_id,
+                "devId": dev_id,
+                "dataItemMap": {
+                    "battery_soc": status.soc,
+                    "charge_discharge_power": status.power_kw,
+                    "battery_voltage": status.voltage_v,
+                    "battery_current": status.current_a,
+                    "battery_temperature": status.temperature_c,
+                    "battery_soh": status.soh,
+                    "run_state": status.status,
+                },
+            }
+        )
 
     if dev_type_id == BatteryDevType.ESS_SYSTEM and out:
         # Aggregate response: one entry per plant
@@ -449,14 +451,16 @@ async def get_task_status(
     elapsed = time.monotonic() - record.created_at
     status = TaskStatus.COMPLETE if elapsed > 2.0 else TaskStatus.IN_PROGRESS
 
-    return _ok({
-        "requestId": request_id,
-        "stationCode": plant_code,
-        "dispatchSwitch": int(record.dispatch_switch),
-        "status": int(status),
-        "errorCode": None,
-        "errorMsg": None,
-    })
+    return _ok(
+        {
+            "requestId": request_id,
+            "stationCode": plant_code,
+            "dispatchSwitch": int(record.dispatch_switch),
+            "status": int(status),
+            "errorCode": None,
+            "errorMsg": None,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

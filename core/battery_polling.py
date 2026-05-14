@@ -66,9 +66,7 @@ class BatteryPoller:
 
     async def _poll_all(self) -> None:
         async with self._session_factory() as session:
-            result = await session.execute(
-                select(Battery).where(Battery.is_active.is_(True))
-            )
+            result = await session.execute(select(Battery).where(Battery.is_active.is_(True)))
             batteries = list(result.scalars().all())
 
         if not batteries:
@@ -87,10 +85,7 @@ class BatteryPoller:
 
     async def _poll_one(self, battery: Battery) -> bool:
         meta: dict[str, Any] = battery.metadata_ or {}
-        if (
-            battery.protocol != BatteryProtocol.REST
-            or meta.get("subtype") != "huawei_fusion_solar"
-        ):
+        if battery.protocol != BatteryProtocol.REST or meta.get("subtype") != "huawei_fusion_solar":
             return False  # protocol not handled yet
 
         # Lazy import to avoid pulling FastAPI into core/ at module load
@@ -127,9 +122,7 @@ class BatteryPoller:
         await self._persist_reading(battery.battery_id, s, state)
         return True
 
-    async def _persist_reading(
-        self, battery_id: UUID, status: Any, state: BatteryState
-    ) -> None:
+    async def _persist_reading(self, battery_id: UUID, status: Any, state: BatteryState) -> None:
         async with self._session_factory() as session:
             reading = BatteryReading(
                 time=datetime.now(UTC),
