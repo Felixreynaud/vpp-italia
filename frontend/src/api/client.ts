@@ -200,6 +200,22 @@ export async function changePassword(req: ChangePasswordRequest): Promise<void> 
   await axiosInstance.post('/api/v1/auth/change-password', req);
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  if (MOCK_DATA) return;
+  await axiosInstance.post('/api/v1/auth/password-reset/request', { email });
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string
+): Promise<void> {
+  if (MOCK_DATA) return;
+  await axiosInstance.post('/api/v1/auth/password-reset/confirm', {
+    token,
+    new_password: newPassword,
+  });
+}
+
 export async function logout(): Promise<void> {
   if (!MOCK_DATA) {
     try {

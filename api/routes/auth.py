@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -25,8 +25,24 @@ from sqlalchemy import select, update
 
 from api import security
 from api.dependencies import CurrentUser, DbSession
-from data.models import RefreshToken, User, UserRole
-from data.schemas import PasswordChangeRequest
+from api.email import (
+    EmailMessage,
+    frontend_base_url,
+    get_email_backend,
+    render_password_reset_email,
+)
+from data.models import (
+    PasswordResetPurpose,
+    PasswordResetToken,
+    RefreshToken,
+    User,
+    UserRole,
+)
+from data.schemas import (
+    PasswordChangeRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -337,3 +353,140 @@ async def change_password(
 
     logger.info("auth.password_changed", user_id=str(user.user_id))
     return {"detail": "password changed"}
+
+
+# ---------------------------------------------------------------------------
+# Password reset (forgot password flow)
+# ---------------------------------------------------------------------------
+
+
+_RESET_TOKEN_TTL = timedelta(hours=1)
+_INVITE_TOKEN_TTL = timedelta(days=7)
+
+
+async def _issue_password_reset_token(
+    session: DbSession,
+    user: User,
+    purpose: PasswordResetPurpose,
+) -> str:
+    """Mint a one-shot token, persist its hash, return the plaintext."""
+    plain = security.generate_refresh_token()
+    token_hash = security.hash_token(plain)
+    ttl = _INVITE_TOKEN_TTL if purpose == PasswordResetPurpose.INVITE else _RESET_TOKEN_TTL
+
+    session.add(
+        PasswordResetToken(
+            user_id=user.user_id,
+            token_hash=token_hash,
+            purpose=purpose,
+            expires_at=datetime.now(UTC) + ttl,
+        )
+    )
+    await session.commit()
+    return plain
+
+
+async def _send_password_reset_email(
+    user: User,
+    plain_token: str,
+    purpose: PasswordResetPurpose,
+) -> None:
+    reset_url = f"{frontend_base_url()}/reset-password?token={plain_token}"
+    rendered = render_password_reset_email(
+        full_name=user.full_name,
+        reset_url=reset_url,
+        is_invite=purpose == PasswordResetPurpose.INVITE,
+    )
+    backend = get_email_backend()
+    await backend.send(
+        EmailMessage(
+            to=user.email,
+            subject=rendered.subject,
+            body_text=rendered.body_text,
+            body_html=rendered.body_html,
+        )
+    )
+
+
+@router.post(
+    "/api/v1/auth/password-reset/request",
+    response_model=GenericResponse,
+    tags=["auth"],
+)
+async def request_password_reset(
+    payload: PasswordResetRequest, session: DbSession
+) -> Any:
+    """Anti-enumeration: ALWAYS responds 200 with the same generic message.
+
+    Whether the email exists or not, the response is identical and the timing
+    is roughly similar (we still issue + send when it exists).
+    """
+    email = (payload.email or "").strip().lower()
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user is not None and user.is_active:
+        plain = await _issue_password_reset_token(
+            session, user, PasswordResetPurpose.RESET
+        )
+        try:
+            await _send_password_reset_email(user, plain, PasswordResetPurpose.RESET)
+        except Exception:
+            # Do not leak the failure — still return the generic 200.
+            logger.exception("auth.reset_email_send_failed", user_id=str(user.user_id))
+    else:
+        logger.info("auth.reset_request_ignored", email=email)
+
+    return {"detail": "If the email exists, a reset link has been sent."}
+
+
+@router.post(
+    "/api/v1/auth/password-reset/confirm",
+    response_model=GenericResponse,
+    tags=["auth"],
+)
+async def confirm_password_reset(
+    payload: PasswordResetConfirm, session: DbSession
+) -> Any:
+    invalid = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired token",
+    )
+
+    token_hash = security.hash_token(payload.token)
+    result = await session.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+    )
+    token = result.scalar_one_or_none()
+    if token is None:
+        raise invalid
+
+    now = datetime.now(UTC)
+    expires = token.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    if token.used_at is not None or expires < now:
+        raise invalid
+
+    user = await session.get(User, token.user_id)
+    if user is None:
+        raise invalid
+
+    user.password_hash = security.hash_password(payload.new_password)
+    # Invitation flow doubles as account activation.
+    if not user.is_active:
+        user.is_active = True
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    if user.email_verified_at is None:
+        user.email_verified_at = now
+
+    token.used_at = now
+    await session.commit()
+
+    logger.info(
+        "auth.password_reset_confirmed",
+        user_id=str(user.user_id),
+        purpose=str(token.purpose),
+    )
+    return {"detail": "password set"}

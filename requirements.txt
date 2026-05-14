@@ -28,6 +28,9 @@ PuLP==2.9.0
 # Messaging
 aiokafka==0.11.0
 
+# AWS (SES for transactional email)
+boto3==1.35.78
+
 # Monitoring
 prometheus-fastapi-instrumentator==7.0.0
 structlog==24.4.0

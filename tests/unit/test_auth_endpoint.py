@@ -15,7 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api import security
 from api.dependencies import get_current_user, get_db
 from api.main import app
-from data.models import RefreshToken, User, UserRole
+from data.models import (
+    PasswordResetPurpose,
+    PasswordResetToken,
+    RefreshToken,
+    User,
+    UserRole,
+)
 
 _JWT_SECRET = "dev-secret-change-in-prod-openssl-rand-hex-32"
 
@@ -27,6 +33,8 @@ def _force_jwt_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("LOGIN_MAX_FAILED_ATTEMPTS", "5")
     monkeypatch.setenv("LOGIN_LOCKOUT_MINUTES", "15")
+    monkeypatch.setenv("EMAIL_BACKEND", "console")
+    monkeypatch.setenv("FRONTEND_BASE_URL", "http://test.local")
 
 
 @pytest_asyncio.fixture
@@ -561,3 +569,189 @@ async def test_me_returns_401_for_unknown_user(db_session: AsyncSession) -> None
         assert resp.status_code == 401
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# /auth/password-reset/request
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reset_request_returns_generic_200_when_email_unknown(
+    auth_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "nobody@example.com"},
+    )
+    assert resp.status_code == 200
+    assert "reset link" in resp.json()["detail"].lower()
+    tokens = (await db_session.execute(select(PasswordResetToken))).scalars().all()
+    assert tokens == []
+
+
+@pytest.mark.asyncio
+async def test_reset_request_issues_token_when_email_exists(
+    auth_client: AsyncClient, admin_user: User, db_session: AsyncSession
+) -> None:
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "admin@example.com"},
+    )
+    assert resp.status_code == 200
+    tokens = (await db_session.execute(select(PasswordResetToken))).scalars().all()
+    assert len(tokens) == 1
+    assert tokens[0].user_id == admin_user.user_id
+    assert tokens[0].purpose == PasswordResetPurpose.RESET
+    assert tokens[0].used_at is None
+
+
+@pytest.mark.asyncio
+async def test_reset_request_ignores_inactive_user_silently(
+    auth_client: AsyncClient, inactive_user: User, db_session: AsyncSession
+) -> None:
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": "inactive@example.com"},
+    )
+    assert resp.status_code == 200
+    tokens = (await db_session.execute(select(PasswordResetToken))).scalars().all()
+    assert tokens == []
+
+
+# ---------------------------------------------------------------------------
+# /auth/password-reset/confirm
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def reset_token_for_admin(
+    db_session: AsyncSession, admin_user: User
+) -> str:
+    plain = security.generate_refresh_token()
+    db_session.add(
+        PasswordResetToken(
+            user_id=admin_user.user_id,
+            token_hash=security.hash_token(plain),
+            purpose=PasswordResetPurpose.RESET,
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
+    await db_session.commit()
+    return plain
+
+
+@pytest.mark.asyncio
+async def test_reset_confirm_success(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    reset_token_for_admin: str,
+) -> None:
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": reset_token_for_admin, "new_password": "BrandNewPw0rd!"},
+    )
+    assert resp.status_code == 200
+
+    await db_session.refresh(admin_user)
+    assert security.verify_password("BrandNewPw0rd!", admin_user.password_hash)
+
+    tokens = (await db_session.execute(select(PasswordResetToken))).scalars().all()
+    assert tokens[0].used_at is not None
+
+
+@pytest.mark.asyncio
+async def test_reset_confirm_invalid_token_returns_400(
+    auth_client: AsyncClient,
+) -> None:
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": "totallyBogusToken123456", "new_password": "BrandNewPw0rd!"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_confirm_expired_token_returns_400(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+) -> None:
+    plain = security.generate_refresh_token()
+    db_session.add(
+        PasswordResetToken(
+            user_id=admin_user.user_id,
+            token_hash=security.hash_token(plain),
+            purpose=PasswordResetPurpose.RESET,
+            expires_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+    )
+    await db_session.commit()
+
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": plain, "new_password": "BrandNewPw0rd!"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_confirm_used_token_cannot_be_reused(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    reset_token_for_admin: str,
+) -> None:
+    first = await auth_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": reset_token_for_admin, "new_password": "BrandNewPw0rd!"},
+    )
+    assert first.status_code == 200
+
+    # Second use of the same token must fail.
+    second = await auth_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": reset_token_for_admin, "new_password": "AnotherStrong1"},
+    )
+    assert second.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reset_confirm_invite_activates_account(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    inactive_user: User,
+) -> None:
+    plain = security.generate_refresh_token()
+    db_session.add(
+        PasswordResetToken(
+            user_id=inactive_user.user_id,
+            token_hash=security.hash_token(plain),
+            purpose=PasswordResetPurpose.INVITE,
+            expires_at=datetime.now(UTC) + timedelta(days=7),
+        )
+    )
+    await db_session.commit()
+
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": plain, "new_password": "Welc0meStrong!"},
+    )
+    assert resp.status_code == 200
+
+    await db_session.refresh(inactive_user)
+    assert inactive_user.is_active is True
+    assert inactive_user.email_verified_at is not None
+
+
+@pytest.mark.asyncio
+async def test_reset_confirm_weak_password_returns_422(
+    auth_client: AsyncClient,
+    reset_token_for_admin: str,
+) -> None:
+    resp = await auth_client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": reset_token_for_admin, "new_password": "weakpw1"},
+    )
+    assert resp.status_code == 422

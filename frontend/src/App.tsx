@@ -9,6 +9,8 @@ import { AdminBatteries } from './pages/admin/Batteries';
 import { CreateBattery } from './pages/admin/CreateBattery';
 import { Portfolio } from './pages/Portfolio';
 import { Account } from './pages/Account';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('vpp_token');
@@ -21,6 +23,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/*"
           element={
