@@ -25,6 +25,14 @@ ENV = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _set_terna_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same rationale as GME tests: TernaClient reads env vars lazily inside
+    _authenticate(), beyond the constructor `with patch.dict(...)` scope."""
+    for k, v in ENV.items():
+        monkeypatch.setenv(k, v)
+
+
 def make_offer(market: str = "MSD") -> MarketOfferCreate:
     return MarketOfferCreate(
         market=market,
