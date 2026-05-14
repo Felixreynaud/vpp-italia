@@ -370,6 +370,8 @@ async def bulk_set_active(
     for b in batteries:
         b.is_active = payload.active
     await db.flush()
+    for b in batteries:
+        await db.refresh(b)
 
     return BatteryListResponse(
         data=[BatteryResponse.model_validate(b) for b in batteries],
