@@ -35,7 +35,11 @@ export function Batteries() {
   }, [batteries, search, filterSite, filterState]);
 
   const faultCount = batteries.filter((b) => b.state === 'fault').length;
-  const avgSoc = batteries.length > 0 ? batteries.reduce((s, b) => s + b.soc_percent, 0) / batteries.length : 0;
+  const batteriesWithSoc = batteries.filter((b) => b.soc_percent != null);
+  const avgSoc =
+    batteriesWithSoc.length > 0
+      ? batteriesWithSoc.reduce((s, b) => s + (b.soc_percent ?? 0), 0) / batteriesWithSoc.length
+      : 0;
 
   return (
     <div className="space-y-6">

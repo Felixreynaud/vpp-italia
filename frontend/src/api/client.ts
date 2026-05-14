@@ -90,8 +90,8 @@ const MOCK_BATTERIES = generateMockBatteries();
 
 function getMockFleetMetrics(): FleetMetrics {
   const active = MOCK_BATTERIES.filter((b) => !['fault', 'offline'].includes(b.state));
-  const socMoyen = active.reduce((s, b) => s + b.soc_percent, 0) / active.length;
-  const totalPower = active.reduce((s, b) => s + b.power_kw, 0);
+  const socMoyen = active.reduce((s, b) => s + (b.soc_percent ?? 0), 0) / active.length;
+  const totalPower = active.reduce((s, b) => s + (b.power_kw ?? 0), 0);
   return {
     soc_moyen: parseFloat(socMoyen.toFixed(1)),
     puissance_totale_kw: parseFloat(totalPower.toFixed(1)),
