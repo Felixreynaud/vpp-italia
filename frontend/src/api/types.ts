@@ -315,6 +315,7 @@ export interface ConfiguredBattery {
   ramp_rate_kw_per_min: string | null;
   state: BatteryState;
   is_active: boolean;
+  aggregate_id?: string | null;
   metadata_?: {
     subtype?: string;
     endpoint_url?: string;
@@ -425,4 +426,47 @@ export interface ApiResponse<T> {
     timestamp: string;
     [key: string]: unknown;
   };
+}
+
+
+export type AggregateStrategy = 'arbitrage_mgp' | 'autoconsommation' | 'msd' | 'stochastique';
+export type MarketName = 'MGP' | 'MI' | 'MSD' | 'MSD_GME' | 'MB';
+
+export interface AggregateBatteryRef {
+  battery_id: string;
+  asset_id: string;
+  name: string;
+  capacity_kwh: number;
+  max_power_kw: number;
+}
+
+export interface Aggregate {
+  aggregate_id: string;
+  name: string;
+  description: string | null;
+  strategy_type: AggregateStrategy;
+  target_market: MarketName | null;
+  target_zone: MGPZone | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  batteries: AggregateBatteryRef[];
+}
+
+export interface AggregateCreateRequest {
+  name: string;
+  description?: string | null;
+  strategy_type?: AggregateStrategy;
+  target_market?: MarketName | null;
+  target_zone?: MGPZone | null;
+  is_active?: boolean;
+}
+
+export interface AggregateUpdateRequest {
+  name?: string;
+  description?: string | null;
+  strategy_type?: AggregateStrategy;
+  target_market?: MarketName | null;
+  target_zone?: MGPZone | null;
+  is_active?: boolean;
 }
