@@ -9,25 +9,47 @@ import {
   Menu,
   X,
   Activity,
+  Settings,
+  FolderOpen,
+  UserCircle,
+  Users,
 } from 'lucide-react';
 import { useCETClock } from '../hooks/useCETClock';
+import { useAuth } from '../hooks/useAuth';
+import { logout } from '../api/client';
 
-const NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  adminOnly?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/optimize', label: 'Optimisation', icon: Zap },
-  { to: '/batteries', label: 'Parc Batteries', icon: Battery },
+  { to: '/batteries', label: 'Activations batteries', icon: Battery },
   { to: '/history', label: 'Historique', icon: BarChart2 },
+  { to: '/admin/batteries', label: 'Management batterie', icon: Settings },
+  { to: '/portfolio', label: 'Portefeuille batteries', icon: FolderOpen },
+  { to: '/admin/users', label: 'Utilisateurs', icon: Users, adminOnly: true },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const cetTime = useCETClock();
+  const { user, clear } = useAuth();
 
-  const handleLogout = () => {
-    localStorage.removeItem('vpp_token');
+  const handleLogout = async () => {
+    await logout();
+    clear();
     void navigate('/login');
   };
+
+  const visibleNavItems = NAV_ITEMS.filter(
+    (item) => !item.adminOnly || user?.role === 'admin'
+  );
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -64,7 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1" aria-label="Pages">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {visibleNavItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -82,9 +104,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="px-3 py-4 border-t border-border">
+        <div className="px-3 py-4 border-t border-border space-y-1">
+          <NavLink
+            to="/account"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${isActive
+                ? 'bg-primary/20 text-primary'
+                : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+              }`
+            }
+          >
+            <UserCircle className="w-4 h-4 flex-shrink-0" />
+            Mon compte
+          </NavLink>
           <button
-            onClick={handleLogout}
+            onClick={() => { void handleLogout(); }}
             className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-700/50 hover:text-white transition-colors"
             aria-label="Se deconnecter"
           >

@@ -63,6 +63,16 @@ class OfferStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class UserRole(StrEnum):
+    ADMIN = "admin"
+    OPERATOR = "operator"
+
+
+class PasswordResetPurpose(StrEnum):
+    INVITE = "invite"
+    RESET = "reset"
+
+
 class Battery(Base):
     __tablename__ = "batteries"
 
@@ -169,3 +179,81 @@ class MarketOffer(Base):
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class User(Base):
+    """Platform user — admin or operator."""
+
+    __tablename__ = "users"
+
+    user_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    # NULL until the user accepts the invitation and sets their password
+    password_hash = Column(String(255), nullable=True)
+    full_name = Column(String(128), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole), nullable=False, default=UserRole.OPERATOR
+    )
+    is_active = Column(Boolean, nullable=False, default=False)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+    failed_login_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    reset_tokens = relationship(
+        "PasswordResetToken", back_populates="user", cascade="all, delete-orphan"
+    )
+    refresh_tokens = relationship(
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class RefreshToken(Base):
+    """Long-lived refresh token (7 days) stored hashed, revocable.
+
+    The plaintext token is delivered to the client in a httpOnly cookie;
+    only its sha256 hash is persisted, so DB compromise does not yield
+    usable tokens.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    token_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash = Column(String(128), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", back_populates="refresh_tokens")
+
+
+class PasswordResetToken(Base):
+    """Single-use token for invitation onboarding or password reset.
+
+    The plaintext token is sent by email; only its sha256 hash is persisted.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    token_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash = Column(String(128), unique=True, nullable=False, index=True)
+    purpose: Mapped[PasswordResetPurpose] = mapped_column(
+        Enum(PasswordResetPurpose), nullable=False, default=PasswordResetPurpose.RESET
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", back_populates="reset_tokens")

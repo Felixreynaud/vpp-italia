@@ -45,7 +45,12 @@ async def client(db_session: AsyncSession):
         yield db_session
 
     def override_user():
-        return {"user_id": "test-user", "roles": ["admin"]}
+        return {
+            "user_id": "test-user",
+            "role": "admin",
+            "roles": ["admin"],
+            "email": "test@example.com",
+        }
 
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user

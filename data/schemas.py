@@ -7,7 +7,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from data.models import BatteryProtocol, BatteryState, DispatchSource, MarketName, OfferStatus
+from data.models import (
+    BatteryProtocol,
+    BatteryState,
+    DispatchSource,
+    MarketName,
+    OfferStatus,
+    UserRole,
+)
 
 T = TypeVar("T")
 
@@ -39,6 +46,12 @@ class BatteryBase(BaseModel):
     min_soc_percent: Decimal = Field(default=Decimal("10.0"), ge=0, le=100)
     max_soc_percent: Decimal = Field(default=Decimal("90.0"), ge=0, le=100)
     ramp_rate_kw_per_min: Decimal | None = Field(default=None, gt=0)
+    # Field name uses trailing underscore to avoid clashing with SQLAlchemy
+    # Base.metadata; the underlying DB column is still "metadata".
+    metadata_: dict[str, Any] | None = Field(
+        default=None,
+        description="Connector-specific config (plant_code, credentials, …)",
+    )
 
     @field_validator("max_soc_percent")
     @classmethod
@@ -61,6 +74,7 @@ class BatteryUpdate(BaseModel):
     min_soc_percent: Decimal | None = Field(default=None, ge=0, le=100)
     max_soc_percent: Decimal | None = Field(default=None, ge=0, le=100)
     ramp_rate_kw_per_min: Decimal | None = None
+    metadata_: dict[str, Any] | None = Field(default=None)
 
 
 class BatteryResponse(BatteryBase):
@@ -72,10 +86,74 @@ class BatteryResponse(BatteryBase):
     created_at: datetime
     updated_at: datetime
 
+    # Runtime values enriched from the latest BatteryReading (nullable when
+    # the battery has never reported yet).
+    soc_percent: float | None = None
+    power_kw: float | None = None
+    voltage_v: float | None = None
+    current_a: float | None = None
+    temperature_c: float | None = None
+    last_seen: datetime | None = None
+
 
 class BatteryListResponse(BaseModel):
     data: list[BatteryResponse]
     meta: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Connector discovery & bulk import (Huawei FusionSolar etc.)
+# ---------------------------------------------------------------------------
+
+
+class HuaweiDiscoverRequest(BaseModel):
+    """Credentials to query a Huawei FusionSolar endpoint (real or simulator)."""
+
+    endpoint_url: str = Field(
+        ..., description="Base URL e.g. http://127.0.0.1:9999 (simulator) or https://intl.fusionsolar.huawei.com"
+    )
+    client_id: str = Field(..., max_length=128)
+    client_secret: str = Field(..., max_length=256)
+
+
+class DiscoveredBattery(BaseModel):
+    plant_code: str
+    plant_name: str
+    device_id: str
+    model: str | None = None
+    capacity_kwh: Decimal
+    max_power_kw: Decimal
+
+
+class HuaweiDiscoverResponse(BaseModel):
+    data: list[DiscoveredBattery]
+    meta: dict[str, Any]
+
+
+class BulkImportItem(BaseModel):
+    """One battery from a discovery response, augmented with VPP-side params."""
+
+    asset_id: str = Field(..., max_length=64)
+    site_id: UUID
+    name: str = Field(..., max_length=128)
+    plant_code: str
+    device_id: str
+    model: str | None = None
+    capacity_kwh: Decimal
+    max_power_kw: Decimal
+
+
+class BulkImportRequest(BaseModel):
+    endpoint_url: str
+    client_id: str
+    client_secret: str
+    batteries: list[BulkImportItem]
+
+
+class BulkImportResponse(BaseModel):
+    imported: int
+    skipped: int
+    battery_ids: list[UUID]
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +167,25 @@ class DispatchCommand(BaseModel):
     )
     duration_minutes: int = Field(default=15, ge=1, le=60)
     reason: str | None = Field(default=None, max_length=256)
+
+
+class ScheduleSlot(BaseModel):
+    hour: int = Field(..., ge=0, le=23)
+    power_kw: float
+
+
+class DispatchApplyRequest(BaseModel):
+    site_id: UUID
+    schedule: list[ScheduleSlot] = Field(..., min_length=24, max_length=24)
+    source: str = Field(default="manual", description="manual | optimizer | market_signal")
+
+
+class DispatchApplyResult(BaseModel):
+    success: bool
+    message: str
+    applied_at: datetime
+    plans_saved: int
+    batteries_targeted: int
 
 
 class DispatchCommandResponse(BaseModel):
@@ -171,3 +268,83 @@ class MarketOfferResponse(BaseModel):
 class MarketOfferListResponse(BaseModel):
     data: list[MarketOfferResponse]
     meta: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# User schemas
+# ---------------------------------------------------------------------------
+
+
+class UserInvite(BaseModel):
+    """Payload sent by an admin to invite a new user."""
+
+    email: str = Field(..., max_length=255)
+    full_name: str = Field(..., max_length=128)
+    role: UserRole = UserRole.OPERATOR
+
+    @field_validator("email")
+    @classmethod
+    def email_must_contain_at(cls, v: str) -> str:
+        v = v.strip().lower()
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("invalid email address")
+        return v
+
+
+class UserUpdate(BaseModel):
+    """Admin-side update (cannot change email or password here)."""
+
+    full_name: str | None = Field(default=None, max_length=128)
+    role: UserRole | None = None
+    is_active: bool | None = None
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: UUID
+    email: str
+    full_name: str
+    role: UserRole
+    is_active: bool
+    email_verified_at: datetime | None
+    last_login_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserListResponse(BaseModel):
+    data: list[UserResponse]
+    meta: dict[str, Any]
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., max_length=255)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=20, max_length=200)
+    new_password: str = Field(..., min_length=10, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("password must contain at least one digit")
+        return v
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=10, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not any(c.isupper() for c in v):
+            raise ValueError("password must contain at least one uppercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("password must contain at least one digit")
+        return v

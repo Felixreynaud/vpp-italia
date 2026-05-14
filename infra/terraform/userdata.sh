@@ -115,6 +115,41 @@ ENV
 chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"
 
+# =============================================================================
+# Huawei FusionSolar simulator (service systemd, port local 9999)
+# =============================================================================
+log "Configuration du service systemd huawei-simulator..."
+cat > /etc/systemd/system/huawei-simulator.service <<SIMSVC
+[Unit]
+Description=Huawei FusionSolar NBI simulator (VPP Italia)
+After=network.target
+
+[Service]
+Type=simple
+User=$APP_USER
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$APP_DIR/.env
+Environment="HUAWEI_SIM_HOST=127.0.0.1"
+Environment="HUAWEI_SIM_PORT=9999"
+Environment="HUAWEI_SIM_NUM_BATTERIES=20"
+Environment="HUAWEI_SIM_RATE_LIMIT_S=1.0"
+ExecStart=$APP_DIR/.venv/bin/python -m connectors.huawei.sim_server
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/huawei-simulator.log
+StandardError=append:/var/log/huawei-simulator.log
+
+[Install]
+WantedBy=multi-user.target
+SIMSVC
+
+touch /var/log/huawei-simulator.log
+chown "$APP_USER:$APP_USER" /var/log/huawei-simulator.log
+
+systemctl daemon-reload
+systemctl enable huawei-simulator
+systemctl start huawei-simulator
+
 # -----------------------------------------------------------------------------
 # Service systemd
 # -----------------------------------------------------------------------------
@@ -336,8 +371,11 @@ server {
     }
 
     # ---- Grafana ----
+    # Pas de slash final sur proxy_pass : on transmet l'URL complète /grafana/...
+    # à Grafana (qui a serve_from_sub_path=true). Sinon Nginx strippe /grafana/
+    # et Grafana renvoie une redirection vers /grafana/, créant une boucle.
     location /grafana/ {
-        proxy_pass http://127.0.0.1:3000/;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -346,7 +384,7 @@ server {
     }
 
     location /grafana/api/live/ {
-        proxy_pass http://127.0.0.1:3000/api/live/;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -404,6 +442,17 @@ done
 
 if [ -n "$TUNNEL_URL" ]; then
     log "Tunnel Cloudflare actif : $TUNNEL_URL"
+
+    # Met à jour le root_url de Grafana avec l'URL publique pour que ses
+    # redirections (ex: /grafana/ -> /grafana/login) pointent vers le bon
+    # hostname externe au lieu de localhost.
+    sed -i "s|^root_url *=.*|root_url = $TUNNEL_URL/grafana/|" /etc/grafana/grafana.ini
+    systemctl restart grafana-server || log "Echec redémarrage Grafana"
+
+    # AWS CLI v1 interprète par défaut les valeurs commençant par http(s):// comme
+    # des URIs à fetcher (cli_follow_urlparam). On désactive ce comportement pour
+    # pouvoir stocker une URL telle quelle dans SSM.
+    aws configure set cli_follow_urlparam false
     aws ssm put-parameter \
         --name "$SSM_PREFIX/cloudflare-tunnel-url" \
         --value "$TUNNEL_URL" \

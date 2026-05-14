@@ -1,15 +1,26 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Zap, AlertTriangle, CheckCircle, Loader2, X, ToggleLeft, ToggleRight } from 'lucide-react';
 import { ScheduleChart } from '../components/ScheduleChart';
-import { runOptimizeAutoconsommation, runOptimizeArbitrage, runOptimizeStochastique, applyDispatch } from '../api/client';
+import {
+  runOptimizeAutoconsommation,
+  runOptimizeArbitrage,
+  runOptimizeStochastique,
+  applyDispatch,
+  listConfiguredBatteries,
+  fetchMGPPrices,
+} from '../api/client';
 import type { OptimizeResult, ArbitrageMode } from '../api/types';
 
-const SITES = ['SITE-MI-01', 'SITE-RO-01', 'SITE-NA-01', 'SITE-TO-01'];
-const MGP_PRICES_DEFAULT = [45, 42, 40, 38, 37, 38, 50, 75, 90, 85, 78, 72, 68, 65, 70, 80, 95, 110, 105, 92, 78, 65, 55, 48];
+interface SiteOption {
+  id: string;
+  label: string;
+}
 
 export function Optimize() {
   const [scenario, setScenario] = useState<'autoconsommation' | 'arbitrage' | 'stochastique'>('arbitrage');
-  const [siteId, setSiteId] = useState(SITES[0]);
+  const [sites, setSites] = useState<SiteOption[]>([]);
+  const [siteId, setSiteId] = useState<string>('');
+  const [mgpPrices, setMgpPrices] = useState<number[]>([]);
   const [arbitrageMode, setArbitrageMode] = useState<ArbitrageMode>('standard');
   const [incertitudePct, setIncertitudePct] = useState(20);
   const [loading, setLoading] = useState(false);
@@ -20,12 +31,47 @@ export function Optimize() {
   const [applyLoading, setApplyLoading] = useState(false);
   const [applySuccess, setApplySuccess] = useState<string | null>(null);
 
+  // Load real sites (distinct site_id from batteries) and MGP prices on mount.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const bats = await listConfiguredBatteries();
+        const grouped = new Map<string, string>();
+        for (const b of bats) {
+          if (!grouped.has(b.site_id)) {
+            const plant = b.metadata_?.plant_code ?? b.name;
+            grouped.set(b.site_id, plant);
+          }
+        }
+        const list: SiteOption[] = Array.from(grouped.entries()).map(([id, label]) => ({
+          id,
+          label,
+        }));
+        setSites(list);
+        if (list.length > 0) setSiteId(list[0].id);
+      } catch {
+        // ignore — page still usable, user can re-try after seeding batteries
+      }
+      try {
+        const mgp = await fetchMGPPrices();
+        setMgpPrices(mgp.prices.map((p) => p.price_eur_mwh));
+      } catch {
+        // fallback to a default curve if /markets/mgp/prices fails
+        setMgpPrices([45, 42, 40, 38, 37, 38, 50, 75, 90, 85, 78, 72, 68, 65, 70, 80, 95, 110, 105, 92, 78, 65, 55, 48]);
+      }
+    })();
+  }, []);
+
   const currentSchedule = Array.from({ length: 24 }, (_, i) => ({
     hour: i,
     power_kw: i >= 8 && i <= 20 ? 80 + Math.sin(i) * 50 : -60,
   }));
 
   const handleOptimize = useCallback(async () => {
+    if (!siteId) {
+      setError('Aucun site disponible : importe d\'abord des batteries dans Admin Batteries.');
+      return;
+    }
     setLoading(true); setError(null); setResult(null);
     try {
       let res: OptimizeResult;
@@ -34,12 +80,12 @@ export function Optimize() {
           site_id: siteId,
           production_pv_kw: Array.from({ length: 24 }, (_, i) => i >= 6 && i <= 19 ? 200 * Math.sin(((i - 6) / 13) * Math.PI) : 0),
           consommation_kw: Array.from({ length: 24 }, (_, i) => 80 + (i >= 7 && i <= 22 ? 60 : 0)),
-          prix_mgp: MGP_PRICES_DEFAULT,
+          prix_mgp: mgpPrices,
         });
       } else if (scenario === 'arbitrage') {
-        res = await runOptimizeArbitrage({ site_id: siteId, prix_mgp: MGP_PRICES_DEFAULT, mode: arbitrageMode });
+        res = await runOptimizeArbitrage({ site_id: siteId, prix_mgp: mgpPrices, mode: arbitrageMode });
       } else {
-        res = await runOptimizeStochastique({ site_id: siteId, prix_mgp_base: MGP_PRICES_DEFAULT, incertitude_pct: incertitudePct });
+        res = await runOptimizeStochastique({ site_id: siteId, prix_mgp_base: mgpPrices, incertitude_pct: incertitudePct });
       }
       setResult(res);
     } catch (err) {
@@ -47,20 +93,24 @@ export function Optimize() {
     } finally {
       setLoading(false);
     }
-  }, [scenario, siteId, arbitrageMode, incertitudePct]);
+  }, [scenario, siteId, arbitrageMode, incertitudePct, mgpPrices]);
 
   const handleApply = async () => {
-    if (!result) return;
+    if (!result || !siteId) return;
     setApplyLoading(true);
     try {
-      const res = await applyDispatch({ schedule: result.schedule });
+      const res = await applyDispatch({ site_id: siteId, schedule: result.schedule });
       setApplySuccess(res.message);
       setShowConfirmModal(false);
-    } catch {
-      setApplySuccess("Erreur lors de l'application");
+    } catch (err) {
+      setApplySuccess(
+        err instanceof Error
+          ? `Erreur application: ${err.message}`
+          : "Erreur lors de l'application"
+      );
     } finally {
       setApplyLoading(false);
-      setTimeout(() => setApplySuccess(null), 5000);
+      setTimeout(() => setApplySuccess(null), 6000);
     }
   };
 
@@ -91,7 +141,8 @@ export function Optimize() {
             <label htmlFor="site" className="block text-xs font-medium text-slate-400">Site</label>
             <select id="site" value={siteId} onChange={(e) => setSiteId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-background border border-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-              {SITES.map((s) => <option key={s} value={s}>{s}</option>)}
+              {sites.length === 0 && <option value="">Aucun site (importer batteries)</option>}
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.label} ({s.id.slice(0, 8)}…)</option>)}
             </select>
           </div>
           {scenario === 'arbitrage' && (

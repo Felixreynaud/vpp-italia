@@ -1,7 +1,16 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 import type {
+  AdminUser,
   Battery,
+  BatteryModelInfo,
+  BulkImportItem,
+  BulkImportResponse,
+  ChangePasswordRequest,
+  ConfiguredBattery,
+  CreateBatteryRequest,
+  DiscoverResponse,
   FleetMetrics,
+  InviteUserRequest,
   MGPPricesResponse,
   OptimizeResult,
   AutoconsommationRequest,
@@ -15,6 +24,9 @@ import type {
   LoginResponse,
   HistoryPoint,
   DispatchSession,
+  TestConnectionResponse,
+  UpdateUserRequest,
+  UserProfile,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
@@ -150,10 +162,73 @@ function getMockDispatchSessions(): DispatchSession[] {
 export async function login(req: LoginRequest): Promise<LoginResponse> {
   if (MOCK_DATA) {
     const token = btoa(`mock:${req.username}:${Date.now()}`);
-    return { access_token: token, token_type: 'bearer' };
+    return {
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        user_id: 'mock-user',
+        email: req.username,
+        full_name: req.username,
+        role: req.username === 'admin' ? 'admin' : 'operator',
+        is_active: true,
+      },
+    };
   }
-  const { data } = await axiosInstance.post<LoginResponse>('/api/v1/auth/login', req);
+  // withCredentials: required so the browser stores the httpOnly refresh cookie
+  // set by the backend on /auth/login.
+  const { data } = await axiosInstance.post<LoginResponse>(
+    '/api/v1/auth/login',
+    req,
+    { withCredentials: true }
+  );
   return data;
+}
+
+export async function fetchMe(): Promise<UserProfile> {
+  if (MOCK_DATA) {
+    return {
+      user_id: 'mock-user',
+      email: 'admin@vpp-italia.local',
+      full_name: 'Default Admin',
+      role: 'admin',
+      is_active: true,
+    };
+  }
+  const { data } = await axiosInstance.get<UserProfile>('/api/v1/auth/me');
+  return data;
+}
+
+export async function changePassword(req: ChangePasswordRequest): Promise<void> {
+  if (MOCK_DATA) return;
+  await axiosInstance.post('/api/v1/auth/change-password', req);
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  if (MOCK_DATA) return;
+  await axiosInstance.post('/api/v1/auth/password-reset/request', { email });
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string
+): Promise<void> {
+  if (MOCK_DATA) return;
+  await axiosInstance.post('/api/v1/auth/password-reset/confirm', {
+    token,
+    new_password: newPassword,
+  });
+}
+
+export async function logout(): Promise<void> {
+  if (!MOCK_DATA) {
+    try {
+      await axiosInstance.post('/api/v1/auth/logout', null, { withCredentials: true });
+    } catch {
+      // Even if the server call fails (network, expired token), we still clear
+      // local state below — best effort.
+    }
+  }
+  localStorage.removeItem('vpp_token');
 }
 
 export async function fetchBatteries(): Promise<Battery[]> {
@@ -217,7 +292,23 @@ export async function sendBatteryCommand(
   req: BatteryCommandRequest
 ): Promise<void> {
   if (MOCK_DATA) return;
-  await axiosInstance.post(`/api/v1/batteries/${batteryId}/command`, req);
+
+  // Convention "batterie" : positive = charge, négative = décharge, 0 = stop.
+  // Cohérente avec ce que le backend /dispatch attend désormais.
+  let power_kw: number;
+  if (req.command === 'charge') {
+    power_kw = +Math.abs(req.power_kw ?? 0);
+  } else if (req.command === 'discharge') {
+    power_kw = -Math.abs(req.power_kw ?? 0);
+  } else {
+    power_kw = 0;
+  }
+
+  await axiosInstance.post(`/api/v1/batteries/${batteryId}/dispatch`, {
+    power_kw,
+    duration_minutes: 15,
+    reason: `manual ${req.command} from UI`,
+  });
 }
 
 export async function fetchHistory(): Promise<HistoryPoint[]> {
@@ -230,6 +321,150 @@ export async function fetchDispatchSessions(): Promise<DispatchSession[]> {
   if (MOCK_DATA) return getMockDispatchSessions();
   const { data } = await axiosInstance.get<{ data: DispatchSession[] }>('/api/v1/history/sessions');
   return data.data;
+}
+
+// ---------------------------------------------------------------------------
+// Admin — fleet management (no MOCK fallback, talks to real backend)
+// ---------------------------------------------------------------------------
+
+export async function listConfiguredBatteries(
+  options: { active?: boolean } = {}
+): Promise<ConfiguredBattery[]> {
+  const params: Record<string, string> = {};
+  if (options.active !== undefined) {
+    params.active = String(options.active);
+  }
+  const { data } = await axiosInstance.get<{ data: ConfiguredBattery[] }>(
+    '/api/v1/batteries',
+    { params }
+  );
+  return data.data;
+}
+
+export async function discoverHuawei(
+  endpointUrl: string,
+  clientId: string,
+  clientSecret: string
+): Promise<DiscoverResponse> {
+  const { data } = await axiosInstance.post<DiscoverResponse>(
+    '/api/v1/batteries/discover/huawei',
+    { endpoint_url: endpointUrl, client_id: clientId, client_secret: clientSecret }
+  );
+  return data;
+}
+
+export async function bulkImportBatteries(
+  endpointUrl: string,
+  clientId: string,
+  clientSecret: string,
+  batteries: BulkImportItem[]
+): Promise<BulkImportResponse> {
+  const { data } = await axiosInstance.post<BulkImportResponse>(
+    '/api/v1/batteries/bulk-import',
+    {
+      endpoint_url: endpointUrl,
+      client_id: clientId,
+      client_secret: clientSecret,
+      batteries,
+    }
+  );
+  return data;
+}
+
+export async function deleteBattery(batteryId: string): Promise<void> {
+  await axiosInstance.delete(`/api/v1/batteries/${batteryId}`);
+}
+
+export async function fetchBatteryModels(): Promise<BatteryModelInfo[]> {
+  const { data } = await axiosInstance.get<{ data: BatteryModelInfo[] }>(
+    '/api/v1/batteries/models'
+  );
+  return data.data;
+}
+
+export async function createBattery(
+  payload: CreateBatteryRequest
+): Promise<ConfiguredBattery> {
+  const { data } = await axiosInstance.post<ConfiguredBattery>(
+    '/api/v1/batteries',
+    payload
+  );
+  return data;
+}
+
+export async function activateBattery(id: string): Promise<ConfiguredBattery> {
+  const { data } = await axiosInstance.post<ConfiguredBattery>(
+    `/api/v1/batteries/${id}/activate`
+  );
+  return data;
+}
+
+export async function deactivateBattery(id: string): Promise<ConfiguredBattery> {
+  const { data } = await axiosInstance.post<ConfiguredBattery>(
+    `/api/v1/batteries/${id}/deactivate`
+  );
+  return data;
+}
+
+export async function bulkSetBatteryActive(
+  batteryIds: string[],
+  active: boolean
+): Promise<ConfiguredBattery[]> {
+  const { data } = await axiosInstance.post<{ data: ConfiguredBattery[] }>(
+    '/api/v1/batteries/bulk-activate',
+    { battery_ids: batteryIds, active }
+  );
+  return data.data;
+}
+
+export async function testBatteryConnection(
+  batteryId: string
+): Promise<TestConnectionResponse> {
+  const { data } = await axiosInstance.post<TestConnectionResponse>(
+    `/api/v1/batteries/${batteryId}/test-connection`
+  );
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Admin — users management (admin role required)
+// ---------------------------------------------------------------------------
+
+export async function listUsers(): Promise<AdminUser[]> {
+  const { data } = await axiosInstance.get<{ data: AdminUser[] }>(
+    '/api/v1/admin/users'
+  );
+  return data.data;
+}
+
+export async function inviteUser(req: InviteUserRequest): Promise<AdminUser> {
+  const { data } = await axiosInstance.post<AdminUser>(
+    '/api/v1/admin/users/invite',
+    req
+  );
+  return data;
+}
+
+export async function updateUser(
+  userId: string,
+  req: UpdateUserRequest
+): Promise<AdminUser> {
+  const { data } = await axiosInstance.patch<AdminUser>(
+    `/api/v1/admin/users/${userId}`,
+    req
+  );
+  return data;
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await axiosInstance.delete(`/api/v1/admin/users/${userId}`);
+}
+
+export async function resendInvite(userId: string): Promise<AdminUser> {
+  const { data } = await axiosInstance.post<AdminUser>(
+    `/api/v1/admin/users/${userId}/resend-invite`
+  );
+  return data;
 }
 
 export default axiosInstance;

@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Activity, AlertCircle, Loader2 } from 'lucide-react';
 import { login } from '../api/client';
+import { useAuth } from '../hooks/useAuth';
 
 export function Login() {
   const navigate = useNavigate();
+  const { refresh } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,6 +19,7 @@ export function Login() {
     try {
       const resp = await login({ username, password });
       localStorage.setItem('vpp_token', resp.access_token);
+      await refresh();
       void navigate('/');
     } catch {
       setError('Identifiants invalides. Veuillez reessayer.');
@@ -71,6 +74,11 @@ export function Login() {
           >
             {loading ? <><Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />Connexion...</> : 'Se connecter'}
           </button>
+          <p className="text-center pt-1">
+            <Link to="/forgot-password" className="text-sm text-primary hover:underline">
+              Mot de passe oublie ?
+            </Link>
+          </p>
         </form>
         <p className="text-center text-xs text-slate-500 mt-4">VPP Italia v0.1 — Environnement securise</p>
       </div>
