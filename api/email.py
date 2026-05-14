@@ -57,9 +57,7 @@ class SESEmailBackend:
         self._sender = sender
 
     async def send(self, message: EmailMessage) -> None:
-        body: dict[str, dict[str, str]] = {
-            "Text": {"Data": message.body_text, "Charset": "UTF-8"}
-        }
+        body: dict[str, dict[str, str]] = {"Text": {"Data": message.body_text, "Charset": "UTF-8"}}
         if message.body_html:
             body["Html"] = {"Data": message.body_html, "Charset": "UTF-8"}
 
@@ -99,9 +97,7 @@ def frontend_base_url() -> str:
     return os.getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
 
 
-def render_password_reset_email(
-    *, full_name: str, reset_url: str, is_invite: bool
-) -> EmailMessage:
+def render_password_reset_email(*, full_name: str, reset_url: str, is_invite: bool) -> EmailMessage:
     if is_invite:
         subject = "Bienvenue sur VPP Italia — definissez votre mot de passe"
         intro = (

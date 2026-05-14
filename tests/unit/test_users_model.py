@@ -133,9 +133,7 @@ async def test_user_email_lookup_indexed(db_session: AsyncSession) -> None:
         db_session.add(User(email=f"user{i}@example.com", full_name=f"User {i}"))
     await db_session.commit()
 
-    result = await db_session.execute(
-        select(User).where(User.email == "user1@example.com")
-    )
+    result = await db_session.execute(select(User).where(User.email == "user1@example.com"))
     user = result.scalar_one()
     assert user.full_name == "User 1"
     assert user.user_id != uuid.UUID(int=0)

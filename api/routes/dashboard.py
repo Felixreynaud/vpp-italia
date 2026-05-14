@@ -54,9 +54,7 @@ async def fleet_metrics(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
     batteries_actives = int(active_res.scalar_one_or_none() or 0)
 
     cap_res = await db.execute(
-        select(func.coalesce(func.sum(Battery.capacity_kwh), 0)).where(
-            Battery.is_active.is_(True)
-        )
+        select(func.coalesce(func.sum(Battery.capacity_kwh), 0)).where(Battery.is_active.is_(True))
     )
     total_capacity_kwh = float(cap_res.scalar_one_or_none() or 0)
 
@@ -117,8 +115,32 @@ async def fleet_metrics(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
 async def mgp_prices_today(_user: CurrentUser) -> dict[str, Any]:
     """Courbe MGP horaire du jour — mock réaliste : creux nocturnes + pics 18-21h."""
     # Base curve (€/MWh) typique italienne — creux à 3-5h, pic à 18-20h
-    base_curve = [45, 42, 40, 38, 37, 38, 50, 75, 90, 85, 78, 72,
-                  68, 65, 70, 80, 95, 110, 105, 92, 78, 65, 55, 48]
+    base_curve = [
+        45,
+        42,
+        40,
+        38,
+        37,
+        38,
+        50,
+        75,
+        90,
+        85,
+        78,
+        72,
+        68,
+        65,
+        70,
+        80,
+        95,
+        110,
+        105,
+        92,
+        78,
+        65,
+        55,
+        48,
+    ]
     prices = [
         {"hour": h, "price_eur_mwh": round(p + random.gauss(0, 3), 2)}
         for h, p in enumerate(base_curve)
@@ -162,13 +184,17 @@ async def fleet_history(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
         )
         result = await db.execute(history_sql)
         for row in result:
-            points.append({
-                "timestamp": row.hour.isoformat() if row.hour else datetime.now(UTC).isoformat(),
-                "power_charge_kw": round(float(row.charge_kw or 0), 1),
-                "power_discharge_kw": round(float(row.discharge_kw or 0), 1),
-                "soc_moyen": round(float(row.soc_avg or 0), 1),
-                "pnl_cumul_eur": 0.0,
-            })
+            points.append(
+                {
+                    "timestamp": row.hour.isoformat()
+                    if row.hour
+                    else datetime.now(UTC).isoformat(),
+                    "power_charge_kw": round(float(row.charge_kw or 0), 1),
+                    "power_discharge_kw": round(float(row.discharge_kw or 0), 1),
+                    "soc_moyen": round(float(row.soc_avg or 0), 1),
+                    "pnl_cumul_eur": 0.0,
+                }
+            )
     except Exception as exc:
         logger.warning("dashboard.history_agg_failed", error=str(exc))
 
@@ -180,13 +206,15 @@ async def fleet_history(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
             hour = ts.hour
             discharge = 200 + 100 * math.sin((hour - 18) / 3) if 16 <= hour <= 22 else 0
             charge = 150 + 50 * math.sin((hour - 3) / 3) if 1 <= hour <= 6 else 0
-            points.append({
-                "timestamp": ts.isoformat(),
-                "power_charge_kw": round(max(0, charge + random.gauss(0, 20)), 1),
-                "power_discharge_kw": round(max(0, discharge + random.gauss(0, 30)), 1),
-                "soc_moyen": round(45 + 20 * math.sin(i / 12) + random.gauss(0, 3), 1),
-                "pnl_cumul_eur": round(i * 25 + random.gauss(0, 15), 2),
-            })
+            points.append(
+                {
+                    "timestamp": ts.isoformat(),
+                    "power_charge_kw": round(max(0, charge + random.gauss(0, 20)), 1),
+                    "power_discharge_kw": round(max(0, discharge + random.gauss(0, 30)), 1),
+                    "soc_moyen": round(45 + 20 * math.sin(i / 12) + random.gauss(0, 3), 1),
+                    "pnl_cumul_eur": round(i * 25 + random.gauss(0, 15), 2),
+                }
+            )
 
     return {
         "data": points,

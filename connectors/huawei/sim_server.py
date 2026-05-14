@@ -28,8 +28,7 @@ from __future__ import annotations
 import os
 import secrets
 import time
-import uuid
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import Body, FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -146,16 +145,18 @@ async def sim_fleet() -> dict[str, Any]:
     for plant_code, plant in simulator._plants.items():
         bats = [b for b in simulator._batteries.values() if b.plant_code == plant_code]
         for bat in bats:
-            fleet.append({
-                "plant_code": plant_code,
-                "plant_name": plant.plant_name,
-                "device_id": bat.device_id,
-                "model": bat.model,
-                "capacity_kwh": bat.capacity_kwh,
-                "max_power_kw": bat.max_power_kw,
-                "soc": round(bat.soc, 1),
-                "current_power_kw": round(bat.current_power_kw, 2),
-            })
+            fleet.append(
+                {
+                    "plant_code": plant_code,
+                    "plant_name": plant.plant_name,
+                    "device_id": bat.device_id,
+                    "model": bat.model,
+                    "capacity_kwh": bat.capacity_kwh,
+                    "max_power_kw": bat.max_power_kw,
+                    "soc": round(bat.soc, 1),
+                    "current_power_kw": round(bat.current_power_kw, 2),
+                }
+            )
     return {"count": len(fleet), "fleet": fleet}
 
 
@@ -234,9 +235,7 @@ async def sim_list_models() -> dict[str, Any]:
                 "capacity_kwh": cap,
                 "max_power_kw": pwr,
                 "tier": (
-                    "residential" if cap < 50
-                    else "commercial" if cap < 200
-                    else "industrial"
+                    "residential" if cap < 50 else "commercial" if cap < 200 else "industrial"
                 ),
             }
             for name, (cap, pwr) in LUNA2000_MODELS.items()
@@ -272,8 +271,8 @@ async def auth_token(payload: AuthPayload) -> dict[str, Any]:
 
 @app.post("/thirdData/getStationList", tags=["thirdData"])
 async def get_station_list(
-    body: dict[str, Any] | None = Body(default=None),
-    xsrf_token: str | None = Header(default=None, alias="xsrf-token"),
+    body: Annotated[dict[str, Any] | None, Body()] = None,
+    xsrf_token: Annotated[str | None, Header(alias="xsrf-token")] = None,
 ) -> dict[str, Any]:
     _verify_token(xsrf_token)
     plants = await simulator.get_plant_list()
@@ -290,8 +289,8 @@ async def get_station_list(
 
 @app.post("/thirdData/getDevList", tags=["thirdData"])
 async def get_dev_list(
-    body: dict[str, Any] = Body(...),
-    xsrf_token: str | None = Header(default=None, alias="xsrf-token"),
+    body: Annotated[dict[str, Any], Body()],
+    xsrf_token: Annotated[str | None, Header(alias="xsrf-token")] = None,
 ) -> dict[str, Any]:
     _verify_token(xsrf_token)
     plant_code = body.get("stationCodes", "")
@@ -317,8 +316,8 @@ async def get_dev_list(
 
 @app.post("/thirdData/getDevRealKpi", tags=["thirdData"])
 async def get_dev_real_kpi(
-    body: dict[str, Any] = Body(...),
-    xsrf_token: str | None = Header(default=None, alias="xsrf-token"),
+    body: Annotated[dict[str, Any], Body()],
+    xsrf_token: Annotated[str | None, Header(alias="xsrf-token")] = None,
 ) -> dict[str, Any]:
     _verify_token(xsrf_token)
     raw_ids = body.get("devIds", "")
@@ -349,23 +348,26 @@ async def get_dev_real_kpi(
     # Build KPI response — mirror real Huawei response shape
     out: list[dict[str, Any]] = []
     for dev_id in device_ids:
-        bat = simulator._batteries.get(dev_id)
-        if bat is None:
+        bat_opt = simulator._batteries.get(dev_id)
+        if bat_opt is None:
             continue
+        bat = bat_opt
         status = bat.to_status()
-        out.append({
-            "devDn": dev_id,
-            "devId": dev_id,
-            "dataItemMap": {
-                "battery_soc": status.soc,
-                "charge_discharge_power": status.power_kw,
-                "battery_voltage": status.voltage_v,
-                "battery_current": status.current_a,
-                "battery_temperature": status.temperature_c,
-                "battery_soh": status.soh,
-                "run_state": status.status,
-            },
-        })
+        out.append(
+            {
+                "devDn": dev_id,
+                "devId": dev_id,
+                "dataItemMap": {
+                    "battery_soc": status.soc,
+                    "charge_discharge_power": status.power_kw,
+                    "battery_voltage": status.voltage_v,
+                    "battery_current": status.current_a,
+                    "battery_temperature": status.temperature_c,
+                    "battery_soh": status.soh,
+                    "run_state": status.status,
+                },
+            }
+        )
 
     if dev_type_id == BatteryDevType.ESS_SYSTEM and out:
         # Aggregate response: one entry per plant
@@ -386,8 +388,8 @@ def _bearer_token(auth_header: str | None) -> str:
 
 @app.post("/rest/openapi/pvms/nbi/v1/control/battery/mode/async-task", tags=["control"])
 async def set_dispatch_mode(
-    body: dict[str, Any] = Body(...),
-    authorization: str | None = Header(default=None),
+    body: Annotated[dict[str, Any], Body()],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     _verify_token(_bearer_token(authorization))
     plant_codes = body.get("stationCodes") or []
@@ -405,8 +407,8 @@ async def set_dispatch_mode(
 
 @app.post("/rest/openapi/pvms/nbi/v2/control/charge-and-discharge/async-task", tags=["control"])
 async def charge_discharge(
-    body: dict[str, Any] = Body(...),
-    authorization: str | None = Header(default=None),
+    body: Annotated[dict[str, Any], Body()],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     _verify_token(_bearer_token(authorization))
     plant_codes = body.get("stationCodes") or []
@@ -436,8 +438,8 @@ async def charge_discharge(
 
 @app.post("/rest/openapi/pvms/v1/vpp/chargeAndDischargeStatus", tags=["control"])
 async def get_task_status(
-    body: dict[str, Any] = Body(...),
-    authorization: str | None = Header(default=None),
+    body: Annotated[dict[str, Any], Body()],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     _verify_token(_bearer_token(authorization))
     request_id = body.get("requestId", "")
@@ -450,14 +452,16 @@ async def get_task_status(
     elapsed = time.monotonic() - record.created_at
     status = TaskStatus.COMPLETE if elapsed > 2.0 else TaskStatus.IN_PROGRESS
 
-    return _ok({
-        "requestId": request_id,
-        "stationCode": plant_code,
-        "dispatchSwitch": int(record.dispatch_switch),
-        "status": int(status),
-        "errorCode": None,
-        "errorMsg": None,
-    })
+    return _ok(
+        {
+            "requestId": request_id,
+            "stationCode": plant_code,
+            "dispatchSwitch": int(record.dispatch_switch),
+            "status": int(status),
+            "errorCode": None,
+            "errorMsg": None,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

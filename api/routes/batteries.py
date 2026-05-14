@@ -1,5 +1,6 @@
 """Battery management endpoints."""
 
+import contextlib
 from decimal import Decimal
 from typing import Annotated, Any
 from urllib.parse import urlparse
@@ -8,6 +9,7 @@ from uuid import UUID, uuid4
 import httpx
 import structlog
 from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import delete, select
 
 from api.dependencies import CurrentUser, DbSession
@@ -129,10 +131,7 @@ HUAWEI_LUNA2000_CATALOG: dict[str, dict[str, Any]] = {
 async def list_battery_models(_user: CurrentUser) -> dict[str, Any]:
     """Catalogue Huawei LUNA2000 — pre-fill tech-specs in the create-battery form."""
     return {
-        "data": [
-            {"name": name, **specs}
-            for name, specs in HUAWEI_LUNA2000_CATALOG.items()
-        ],
+        "data": [{"name": name, **specs} for name, specs in HUAWEI_LUNA2000_CATALOG.items()],
         "meta": {"count": len(HUAWEI_LUNA2000_CATALOG), "manufacturer": "Huawei"},
     }
 
@@ -160,7 +159,8 @@ async def _push_to_simulator(
                 json={"plant_code": plant_code, "plant_name": plant_name, "model": model},
             )
             if resp.status_code in (200, 201):
-                return resp.json()
+                data: dict[str, Any] = resp.json()
+                return data
             logger.warning(
                 "simulator.push_failed",
                 status=resp.status_code,
@@ -288,9 +288,7 @@ async def list_batteries(
             item.power_kw = float(r.power_kw) if r.power_kw is not None else None
             item.voltage_v = float(r.voltage_v) if r.voltage_v is not None else None
             item.current_a = float(r.current_a) if r.current_a is not None else None
-            item.temperature_c = (
-                float(r.temperature_c) if r.temperature_c is not None else None
-            )
+            item.temperature_c = float(r.temperature_c) if r.temperature_c is not None else None
             item.last_seen = r.time
         payload.append(item)
 
@@ -322,10 +320,7 @@ async def create_battery(
         meta["device_id"] = f"DEV_{meta['plant_code']}"
 
     # Try to materialise the plant in the local simulator
-    if (
-        payload.protocol == BatteryProtocol.REST
-        and meta.get("subtype") == "huawei_fusion_solar"
-    ):
+    if payload.protocol == BatteryProtocol.REST and meta.get("subtype") == "huawei_fusion_solar":
         endpoint_url = meta.get("endpoint_url", "")
         model = (meta.get("identity") or {}).get("model") or meta.get("model")
         if endpoint_url and model and _is_local_simulator(endpoint_url):
@@ -352,9 +347,6 @@ async def create_battery(
 # ---------------------------------------------------------------------------
 
 
-from pydantic import BaseModel
-
-
 class BulkActivatePayload(BaseModel):
     battery_ids: list[UUID]
     active: bool = True
@@ -373,9 +365,7 @@ async def bulk_set_active(
     if not payload.battery_ids:
         return BatteryListResponse(data=[], meta={"count": 0, "next_cursor": None})
 
-    result = await db.execute(
-        select(Battery).where(Battery.battery_id.in_(payload.battery_ids))
-    )
+    result = await db.execute(select(Battery).where(Battery.battery_id.in_(payload.battery_ids)))
     batteries = result.scalars().all()
     for b in batteries:
         b.is_active = payload.active
@@ -469,10 +459,7 @@ async def delete_battery(
 
     # Try to remove from simulator first (best-effort)
     meta = battery.metadata_ or {}
-    if (
-        battery.protocol == BatteryProtocol.REST
-        and meta.get("subtype") == "huawei_fusion_solar"
-    ):
+    if battery.protocol == BatteryProtocol.REST and meta.get("subtype") == "huawei_fusion_solar":
         endpoint_url = meta.get("endpoint_url", "")
         plant_code = meta.get("plant_code")
         if endpoint_url and plant_code:
@@ -522,10 +509,8 @@ async def send_dispatch_command(
         plant_code = meta["plant_code"]
 
         # Ensure the plant is in thirdPartyDispatch mode (idempotent)
-        try:
+        with contextlib.suppress(Exception):
             await client.set_dispatch_mode(plant_code)
-        except Exception:
-            pass
 
         power_kw_abs = abs(float(command.power_kw))
         power_w = power_kw_abs * 1000.0
@@ -661,7 +646,9 @@ async def bulk_import_batteries(
 
     Skips silently any battery whose asset_id already exists (idempotent).
     """
-    parsed = urlparse(payload.endpoint_url if "://" in payload.endpoint_url else f"https://{payload.endpoint_url}")
+    parsed = urlparse(
+        payload.endpoint_url if "://" in payload.endpoint_url else f"https://{payload.endpoint_url}"
+    )
     host = parsed.hostname or ""
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
@@ -734,9 +721,7 @@ async def test_connection(
             detail=f"test-connection only supports Huawei FusionSolar (got {subtype})",
         )
 
-    client = _build_huawei_client(
-        meta["endpoint_url"], meta["client_id"], meta["client_secret"]
-    )
+    client = _build_huawei_client(meta["endpoint_url"], meta["client_id"], meta["client_secret"])
     try:
         statuses = await client.get_battery_realtime(
             device_ids=[meta["device_id"]], plant_code=meta["plant_code"]

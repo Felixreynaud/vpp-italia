@@ -110,7 +110,8 @@ class HuaweiDiscoverRequest(BaseModel):
     """Credentials to query a Huawei FusionSolar endpoint (real or simulator)."""
 
     endpoint_url: str = Field(
-        ..., description="Base URL e.g. http://127.0.0.1:9999 (simulator) or https://intl.fusionsolar.huawei.com"
+        ...,
+        description="Base URL e.g. http://127.0.0.1:9999 (simulator) or https://intl.fusionsolar.huawei.com",
     )
     client_id: str = Field(..., max_length=128)
     client_secret: str = Field(..., max_length=256)

@@ -145,9 +145,7 @@ async def _revoke_refresh_token(session: DbSession, plain_token: str) -> None:
     await session.commit()
 
 
-async def _load_active_refresh_token(
-    session: DbSession, plain_token: str
-) -> RefreshToken | None:
+async def _load_active_refresh_token(session: DbSession, plain_token: str) -> RefreshToken | None:
     token_hash = security.hash_token(plain_token)
     result = await session.execute(
         select(RefreshToken).where(RefreshToken.token_hash == token_hash)
@@ -178,9 +176,7 @@ async def login(
 ) -> Any:
     email = req.resolved_email()
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="email is required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email is required")
 
     invalid_credentials = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -413,9 +409,7 @@ async def _send_password_reset_email(
     response_model=GenericResponse,
     tags=["auth"],
 )
-async def request_password_reset(
-    payload: PasswordResetRequest, session: DbSession
-) -> Any:
+async def request_password_reset(payload: PasswordResetRequest, session: DbSession) -> Any:
     """Anti-enumeration: ALWAYS responds 200 with the same generic message.
 
     Whether the email exists or not, the response is identical and the timing
@@ -426,9 +420,7 @@ async def request_password_reset(
     user = result.scalar_one_or_none()
 
     if user is not None and user.is_active:
-        plain = await _issue_password_reset_token(
-            session, user, PasswordResetPurpose.RESET
-        )
+        plain = await _issue_password_reset_token(session, user, PasswordResetPurpose.RESET)
         try:
             await _send_password_reset_email(user, plain, PasswordResetPurpose.RESET)
         except Exception:
@@ -445,9 +437,7 @@ async def request_password_reset(
     response_model=GenericResponse,
     tags=["auth"],
 )
-async def confirm_password_reset(
-    payload: PasswordResetConfirm, session: DbSession
-) -> Any:
+async def confirm_password_reset(payload: PasswordResetConfirm, session: DbSession) -> Any:
     invalid = HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Invalid or expired token",

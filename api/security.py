@@ -65,7 +65,10 @@ def login_lockout_duration() -> timedelta:
 
 def hash_password(password: str) -> str:
     secret = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
-    return bcrypt.hashpw(secret, bcrypt.gensalt()).decode("ascii")
+    # Explicit annotation works whether bcrypt's return type is `bytes` (with
+    # stubs) or `Any` (without stubs) — Any is silently compatible with `bytes`.
+    hashed: bytes = bcrypt.hashpw(secret, bcrypt.gensalt())
+    return hashed.decode("ascii")
 
 
 def verify_password(password: str, password_hash: str | None) -> bool:
@@ -74,7 +77,8 @@ def verify_password(password: str, password_hash: str | None) -> bool:
         return False
     secret = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
     try:
-        return bcrypt.checkpw(secret, password_hash.encode("ascii"))
+        ok: bool = bcrypt.checkpw(secret, password_hash.encode("ascii"))
+        return ok
     except (ValueError, TypeError):
         return False
 
@@ -95,12 +99,13 @@ def create_access_token(user_id: str, role: str, *, email: str | None = None) ->
     }
     if email:
         payload["email"] = email
-    return jwt.encode(payload, _jwt_secret(), algorithm=_jwt_algorithm())
+    token: str = jwt.encode(payload, _jwt_secret(), algorithm=_jwt_algorithm())
+    return token
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     """Decode an access token. Raises jose.JWTError on any failure."""
-    payload = jwt.decode(token, _jwt_secret(), algorithms=[_jwt_algorithm()])
+    payload: dict[str, Any] = jwt.decode(token, _jwt_secret(), algorithms=[_jwt_algorithm()])
     if payload.get("type") not in (None, "access"):
         raise JWTError("Not an access token")
     return payload

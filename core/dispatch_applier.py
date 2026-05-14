@@ -17,6 +17,7 @@ the next 24h.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -56,10 +57,8 @@ class DispatchApplier:
         self._running = False
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info("dispatch_applier.stopped")
 
@@ -95,9 +94,7 @@ class DispatchApplier:
         if not rows:
             return
 
-        logger.debug(
-            "dispatch_applier.cycle_start", date=today_iso, qh=qh, candidates=len(rows)
-        )
+        logger.debug("dispatch_applier.cycle_start", date=today_iso, qh=qh, candidates=len(rows))
 
         sent = 0
         for plan, battery in rows:
@@ -115,10 +112,7 @@ class DispatchApplier:
     async def _apply_one(self, battery: Battery, plan: DispatchPlan) -> bool:
         meta = battery.metadata_ or {}
         subtype = meta.get("subtype")
-        if (
-            battery.protocol != BatteryProtocol.REST
-            or subtype != "huawei_fusion_solar"
-        ):
+        if battery.protocol != BatteryProtocol.REST or subtype != "huawei_fusion_solar":
             return False
 
         from api.routes.batteries import _build_huawei_client
@@ -130,10 +124,8 @@ class DispatchApplier:
             plant_code = meta["plant_code"]
 
             # Idempotent dispatch-mode activation
-            try:
+            with contextlib.suppress(Exception):
                 await client.set_dispatch_mode(plant_code)
-            except Exception:
-                pass
 
             power_kw = float(plan.power_kw)
             power_w_abs = abs(power_kw) * 1000.0

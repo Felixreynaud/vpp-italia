@@ -131,9 +131,7 @@ async def test_operator_cannot_invite(operator_client: AsyncClient) -> None:
 async def test_admin_can_list_users(
     admin_client: AsyncClient, admin_user: User, operator_user: User
 ) -> None:
-    resp = await admin_client.get(
-        "/api/v1/admin/users", headers={"Authorization": "Bearer fake"}
-    )
+    resp = await admin_client.get("/api/v1/admin/users", headers={"Authorization": "Bearer fake"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["meta"]["count"] == 2
@@ -207,7 +205,9 @@ async def test_resend_invite_issues_new_token(
     admin_client: AsyncClient, db_session: AsyncSession
 ) -> None:
     # Create a pending user
-    u = User(email="pending@example.com", full_name="Pending", role=UserRole.OPERATOR, is_active=False)
+    u = User(
+        email="pending@example.com", full_name="Pending", role=UserRole.OPERATOR, is_active=False
+    )
     db_session.add(u)
     await db_session.commit()
     await db_session.refresh(u)
@@ -251,9 +251,7 @@ async def test_admin_can_promote_operator_to_admin(
 
 
 @pytest.mark.asyncio
-async def test_admin_cannot_demote_self(
-    admin_client: AsyncClient, admin_user: User
-) -> None:
+async def test_admin_cannot_demote_self(admin_client: AsyncClient, admin_user: User) -> None:
     resp = await admin_client.patch(
         f"/api/v1/admin/users/{admin_user.user_id}",
         headers={"Authorization": "Bearer fake"},
@@ -263,9 +261,7 @@ async def test_admin_cannot_demote_self(
 
 
 @pytest.mark.asyncio
-async def test_admin_cannot_deactivate_self(
-    admin_client: AsyncClient, admin_user: User
-) -> None:
+async def test_admin_cannot_deactivate_self(admin_client: AsyncClient, admin_user: User) -> None:
     resp = await admin_client.patch(
         f"/api/v1/admin/users/{admin_user.user_id}",
         headers={"Authorization": "Bearer fake"},
@@ -325,9 +321,7 @@ async def test_cannot_demote_last_active_admin(
 
 
 @pytest.mark.asyncio
-async def test_can_update_full_name(
-    admin_client: AsyncClient, operator_user: User
-) -> None:
+async def test_can_update_full_name(admin_client: AsyncClient, operator_user: User) -> None:
     resp = await admin_client.patch(
         f"/api/v1/admin/users/{operator_user.user_id}",
         headers={"Authorization": "Bearer fake"},
@@ -356,9 +350,7 @@ async def test_admin_can_delete_operator(
 
 
 @pytest.mark.asyncio
-async def test_admin_cannot_delete_self(
-    admin_client: AsyncClient, admin_user: User
-) -> None:
+async def test_admin_cannot_delete_self(admin_client: AsyncClient, admin_user: User) -> None:
     resp = await admin_client.delete(
         f"/api/v1/admin/users/{admin_user.user_id}",
         headers={"Authorization": "Bearer fake"},
@@ -395,9 +387,7 @@ async def test_cannot_delete_last_active_admin(
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             # Step 1: deactivate first admin → leaves only second_admin active
             r = await c.patch(
                 f"/api/v1/admin/users/{admin_user.user_id}",
