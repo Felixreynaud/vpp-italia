@@ -11,8 +11,10 @@ import {
   Activity,
   Settings,
   FolderOpen,
+  UserCircle,
 } from 'lucide-react';
 import { useCETClock } from '../hooks/useCETClock';
+import { logout } from '../api/client';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -28,8 +30,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const cetTime = useCETClock();
 
-  const handleLogout = () => {
-    localStorage.removeItem('vpp_token');
+  const handleLogout = async () => {
+    await logout();
     void navigate('/login');
   };
 
@@ -86,9 +88,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="px-3 py-4 border-t border-border">
+        <div className="px-3 py-4 border-t border-border space-y-1">
+          <NavLink
+            to="/account"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${isActive
+                ? 'bg-primary/20 text-primary'
+                : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+              }`
+            }
+          >
+            <UserCircle className="w-4 h-4 flex-shrink-0" />
+            Mon compte
+          </NavLink>
           <button
-            onClick={handleLogout}
+            onClick={() => { void handleLogout(); }}
             className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-700/50 hover:text-white transition-colors"
             aria-label="Se deconnecter"
           >

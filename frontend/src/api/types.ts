@@ -364,9 +364,25 @@ export interface LoginRequest {
   password: string;
 }
 
+export type UserRole = 'admin' | 'operator';
+
+export interface UserProfile {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+}
+
 export interface LoginResponse {
   access_token: string;
   token_type: string;
+  user?: UserProfile;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
 }
 
 export interface ApiResponse<T> {

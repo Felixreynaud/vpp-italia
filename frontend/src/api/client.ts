@@ -4,6 +4,7 @@ import type {
   BatteryModelInfo,
   BulkImportItem,
   BulkImportResponse,
+  ChangePasswordRequest,
   ConfiguredBattery,
   CreateBatteryRequest,
   DiscoverResponse,
@@ -22,6 +23,7 @@ import type {
   HistoryPoint,
   DispatchSession,
   TestConnectionResponse,
+  UserProfile,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
@@ -157,10 +159,57 @@ function getMockDispatchSessions(): DispatchSession[] {
 export async function login(req: LoginRequest): Promise<LoginResponse> {
   if (MOCK_DATA) {
     const token = btoa(`mock:${req.username}:${Date.now()}`);
-    return { access_token: token, token_type: 'bearer' };
+    return {
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        user_id: 'mock-user',
+        email: req.username,
+        full_name: req.username,
+        role: req.username === 'admin' ? 'admin' : 'operator',
+        is_active: true,
+      },
+    };
   }
-  const { data } = await axiosInstance.post<LoginResponse>('/api/v1/auth/login', req);
+  // withCredentials: required so the browser stores the httpOnly refresh cookie
+  // set by the backend on /auth/login.
+  const { data } = await axiosInstance.post<LoginResponse>(
+    '/api/v1/auth/login',
+    req,
+    { withCredentials: true }
+  );
   return data;
+}
+
+export async function fetchMe(): Promise<UserProfile> {
+  if (MOCK_DATA) {
+    return {
+      user_id: 'mock-user',
+      email: 'admin@vpp-italia.local',
+      full_name: 'Default Admin',
+      role: 'admin',
+      is_active: true,
+    };
+  }
+  const { data } = await axiosInstance.get<UserProfile>('/api/v1/auth/me');
+  return data;
+}
+
+export async function changePassword(req: ChangePasswordRequest): Promise<void> {
+  if (MOCK_DATA) return;
+  await axiosInstance.post('/api/v1/auth/change-password', req);
+}
+
+export async function logout(): Promise<void> {
+  if (!MOCK_DATA) {
+    try {
+      await axiosInstance.post('/api/v1/auth/logout', null, { withCredentials: true });
+    } catch {
+      // Even if the server call fails (network, expired token), we still clear
+      // local state below — best effort.
+    }
+  }
+  localStorage.removeItem('vpp_token');
 }
 
 export async function fetchBatteries(): Promise<Battery[]> {

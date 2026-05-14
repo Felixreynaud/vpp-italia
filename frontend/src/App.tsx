@@ -8,6 +8,7 @@ import { Login } from './pages/Login';
 import { AdminBatteries } from './pages/admin/Batteries';
 import { CreateBattery } from './pages/admin/CreateBattery';
 import { Portfolio } from './pages/Portfolio';
+import { Account } from './pages/Account';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('vpp_token');
@@ -33,6 +34,7 @@ export default function App() {
                   <Route path="/admin/batteries" element={<AdminBatteries />} />
                   <Route path="/admin/batteries/new" element={<CreateBattery />} />
                   <Route path="/portfolio" element={<Portfolio />} />
+                  <Route path="/account" element={<Account />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>

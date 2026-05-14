@@ -357,6 +357,185 @@ async def test_me_returns_401_for_inactive_user(
         app.dependency_overrides.clear()
 
 
+# ---------------------------------------------------------------------------
+# /auth/change-password
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_change_password_success(
+    db_session: AsyncSession, admin_user: User
+) -> None:
+    async def override_db():
+        yield db_session
+
+    def override_user():
+        return {
+            "user_id": str(admin_user.user_id),
+            "role": "admin",
+            "roles": ["admin"],
+            "email": admin_user.email,
+        }
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_user
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/auth/change-password",
+                headers={"Authorization": "Bearer fake"},
+                json={
+                    "current_password": "Str0ngP@ssword",
+                    "new_password": "EvenStr0nger123",
+                },
+            )
+        assert resp.status_code == 200
+        assert resp.json()["detail"] == "password changed"
+
+        await db_session.refresh(admin_user)
+        assert security.verify_password("EvenStr0nger123", admin_user.password_hash)
+        assert not security.verify_password("Str0ngP@ssword", admin_user.password_hash)
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_change_password_wrong_current_returns_400(
+    db_session: AsyncSession, admin_user: User
+) -> None:
+    async def override_db():
+        yield db_session
+
+    def override_user():
+        return {
+            "user_id": str(admin_user.user_id),
+            "role": "admin",
+            "roles": ["admin"],
+            "email": admin_user.email,
+        }
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_user
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/auth/change-password",
+                headers={"Authorization": "Bearer fake"},
+                json={
+                    "current_password": "wrong",
+                    "new_password": "EvenStr0nger123",
+                },
+            )
+        assert resp.status_code == 400
+        assert "current password" in resp.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_change_password_same_as_current_returns_400(
+    db_session: AsyncSession, admin_user: User
+) -> None:
+    async def override_db():
+        yield db_session
+
+    def override_user():
+        return {
+            "user_id": str(admin_user.user_id),
+            "role": "admin",
+            "roles": ["admin"],
+            "email": admin_user.email,
+        }
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_user
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/auth/change-password",
+                headers={"Authorization": "Bearer fake"},
+                json={
+                    "current_password": "Str0ngP@ssword",
+                    "new_password": "Str0ngP@ssword",
+                },
+            )
+        assert resp.status_code == 400
+        assert "differ" in resp.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_change_password_weak_new_returns_422(
+    db_session: AsyncSession, admin_user: User
+) -> None:
+    """Pydantic validator rejects weak passwords before reaching the handler."""
+
+    async def override_db():
+        yield db_session
+
+    def override_user():
+        return {
+            "user_id": str(admin_user.user_id),
+            "role": "admin",
+            "roles": ["admin"],
+            "email": admin_user.email,
+        }
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_user
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            # no uppercase
+            resp = await c.post(
+                "/api/v1/auth/change-password",
+                headers={"Authorization": "Bearer fake"},
+                json={
+                    "current_password": "Str0ngP@ssword",
+                    "new_password": "alllowercase1",
+                },
+            )
+        assert resp.status_code == 422
+
+        # no digit
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/auth/change-password",
+                headers={"Authorization": "Bearer fake"},
+                json={
+                    "current_password": "Str0ngP@ssword",
+                    "new_password": "NoDigitsHere",
+                },
+            )
+        assert resp.status_code == 422
+
+        # too short
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/v1/auth/change-password",
+                headers={"Authorization": "Bearer fake"},
+                json={
+                    "current_password": "Str0ngP@ssword",
+                    "new_password": "Short1",
+                },
+            )
+        assert resp.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
 @pytest.mark.asyncio
 async def test_me_returns_401_for_unknown_user(db_session: AsyncSession) -> None:
     async def override_db():

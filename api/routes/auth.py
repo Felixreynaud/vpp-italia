@@ -26,6 +26,7 @@ from sqlalchemy import select, update
 from api import security
 from api.dependencies import CurrentUser, DbSession
 from data.models import RefreshToken, User, UserRole
+from data.schemas import PasswordChangeRequest
 
 logger = structlog.get_logger(__name__)
 
@@ -294,3 +295,45 @@ async def me(current: CurrentUser, session: DbSession) -> Any:
         "role": user.role,
         "is_active": user.is_active,
     }
+
+
+@router.post(
+    "/api/v1/auth/change-password",
+    response_model=GenericResponse,
+    tags=["auth"],
+)
+async def change_password(
+    payload: PasswordChangeRequest,
+    current: CurrentUser,
+    session: DbSession,
+) -> Any:
+    try:
+        user_pk = uuid.UUID(str(current["user_id"]))
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user identifier"
+        ) from None
+
+    user = await session.get(User, user_pk)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User no longer active"
+        )
+
+    if not security.verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    if security.verify_password(payload.new_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must differ from the current one",
+        )
+
+    user.password_hash = security.hash_password(payload.new_password)
+    await session.commit()
+
+    logger.info("auth.password_changed", user_id=str(user.user_id))
+    return {"detail": "password changed"}
