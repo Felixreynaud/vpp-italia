@@ -71,34 +71,65 @@ export function BatteryCard({ battery, onCommandSent }: BatteryCardProps) {
       <div>
         <div className="flex justify-between text-xs mb-1">
           <span className="text-slate-400">SoC</span>
-          <span className="font-bold text-white">{battery.soc_percent.toFixed(1)}%</span>
+          <span className="font-bold text-white">
+            {battery.soc_percent != null ? `${Number(battery.soc_percent).toFixed(1)}%` : '—'}
+          </span>
         </div>
         <div
           className="w-full h-2 bg-slate-700 rounded-full overflow-hidden"
           role="progressbar"
-          aria-valuenow={battery.soc_percent}
+          aria-valuenow={battery.soc_percent ?? 0}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`SoC: ${battery.soc_percent.toFixed(1)}%`}
+          aria-label={
+            battery.soc_percent != null
+              ? `SoC: ${Number(battery.soc_percent).toFixed(1)}%`
+              : 'SoC: pas de donnees'
+          }
         >
           <div
-            className={`h-full rounded-full transition-all duration-500 ${getSocBarColor(battery.soc_percent)}`}
-            style={{ width: `${Math.min(100, battery.soc_percent)}%` }}
+            className={`h-full rounded-full transition-all duration-500 ${getSocBarColor(battery.soc_percent ?? 0)}`}
+            style={{ width: `${Math.min(100, battery.soc_percent ?? 0)}%` }}
           />
         </div>
       </div>
       <div className="flex items-center gap-3 text-xs">
         <div className="flex items-center gap-1 text-slate-400">
           <Zap className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
-          <span className={battery.power_kw > 0 ? 'text-success' : battery.power_kw < 0 ? 'text-primary' : 'text-slate-400'}>
-            {battery.power_kw > 0 ? '+' : ''}{battery.power_kw.toFixed(0)} kW
-          </span>
+          {battery.power_kw != null ? (
+            <span
+              className={
+                battery.power_kw > 0
+                  ? 'text-success'
+                  : battery.power_kw < 0
+                    ? 'text-primary'
+                    : 'text-slate-400'
+              }
+            >
+              {battery.power_kw > 0 ? '+' : ''}
+              {Number(battery.power_kw).toFixed(0)} kW
+            </span>
+          ) : (
+            <span className="text-slate-500">— kW</span>
+          )}
         </div>
         <div className="flex items-center gap-1 text-slate-400">
           <Thermometer className="w-3.5 h-3.5 text-warning" aria-hidden="true" />
-          <span className={battery.temperature_c > 40 ? 'text-warning' : battery.temperature_c > 50 ? 'text-danger' : 'text-slate-300'}>
-            {battery.temperature_c.toFixed(1)}&deg;C
-          </span>
+          {battery.temperature_c != null ? (
+            <span
+              className={
+                battery.temperature_c > 50
+                  ? 'text-danger'
+                  : battery.temperature_c > 40
+                    ? 'text-warning'
+                    : 'text-slate-300'
+              }
+            >
+              {Number(battery.temperature_c).toFixed(1)}&deg;C
+            </span>
+          ) : (
+            <span className="text-slate-500">—&deg;C</span>
+          )}
         </div>
         <div className="ml-auto text-slate-500 truncate text-right">
           {battery.manufacturer ?? battery.protocol}

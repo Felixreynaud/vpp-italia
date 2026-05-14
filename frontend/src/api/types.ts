@@ -15,12 +15,13 @@ export interface Battery {
   capacity_kwh: number;
   max_power_kw: number;
   protocol: BatteryProtocol;
-  soc_percent: number;
-  power_kw: number;
+  // Telemetry fields are null until the battery has at least one reading.
+  soc_percent: number | null;
+  power_kw: number | null;
   state: BatteryState;
-  temperature_c: number;
-  voltage_v?: number;
-  last_seen?: string;
+  temperature_c: number | null;
+  voltage_v?: number | null;
+  last_seen?: string | null;
   manufacturer?: string;
 }
 
