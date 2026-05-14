@@ -1,6 +1,6 @@
 """Shared FastAPI dependencies: DB session, authentication."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Annotated, Any
 
 import structlog
@@ -82,9 +82,40 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dic
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-        return {"user_id": user_id, "roles": payload.get("roles", [])}
+        # `role` is the canonical singular field; `roles` kept for backward compat.
+        role = payload.get("role")
+        roles = payload.get("roles") or ([role] if role else [])
+        if role is None and roles:
+            role = roles[0]
+        return {
+            "user_id": user_id,
+            "role": role,
+            "roles": roles,
+            "email": payload.get("email"),
+        }
     except JWTError:
         raise credentials_exception from None
 
 
 CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
+
+
+def require_role(*allowed_roles: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Build a dependency that 403s if the caller's role is not in `allowed_roles`."""
+
+    allowed = {r.lower() for r in allowed_roles}
+
+    def _checker(user: CurrentUser) -> dict[str, Any]:
+        user_role = (user.get("role") or "").lower()
+        user_roles = {str(r).lower() for r in (user.get("roles") or [])}
+        if user_role in allowed or user_roles & allowed:
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient role",
+        )
+
+    return _checker
+
+
+require_admin = require_role("admin")

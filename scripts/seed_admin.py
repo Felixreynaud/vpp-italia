@@ -19,15 +19,13 @@ import os
 import sys
 
 import structlog
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from api.security import hash_password
 from data.models import Base, User, UserRole
 
 logger = structlog.get_logger(__name__)
-
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 async def seed_admin() -> int:
@@ -67,7 +65,7 @@ async def seed_admin() -> int:
 
         user = User(
             email=email,
-            password_hash=_pwd_context.hash(password),
+            password_hash=hash_password(password),
             full_name=full_name,
             role=UserRole.ADMIN,
             is_active=True,
