@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, CheckCircle2, KeyRound, Loader2, User as UserIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { AlertCircle, CheckCircle2, Globe, KeyRound, Loader2, User as UserIcon } from 'lucide-react';
 import { changePassword, fetchMe } from '../api/client';
 import type { UserProfile } from '../api/types';
+import { SUPPORTED_LANGUAGES } from '../i18n';
 
 export function Account() {
+  const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -22,7 +25,7 @@ export function Account() {
         const me = await fetchMe();
         if (!cancelled) setProfile(me);
       } catch {
-        if (!cancelled) setLoadError('Impossible de charger votre profil.');
+        if (!cancelled) setLoadError(t('account.load_error'));
       } finally {
         if (!cancelled) setLoadingProfile(false);
       }
@@ -30,15 +33,15 @@ export function Account() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const validate = (): string | null => {
-    if (!currentPassword) return 'Le mot de passe actuel est requis.';
-    if (newPassword.length < 10) return 'Le nouveau mot de passe doit faire au moins 10 caracteres.';
-    if (!/[A-Z]/.test(newPassword)) return 'Le nouveau mot de passe doit contenir au moins une majuscule.';
-    if (!/[0-9]/.test(newPassword)) return 'Le nouveau mot de passe doit contenir au moins un chiffre.';
-    if (newPassword === currentPassword) return 'Le nouveau mot de passe doit etre different de l\'actuel.';
-    if (newPassword !== confirmPassword) return 'La confirmation ne correspond pas.';
+    if (!currentPassword) return t('account.errors.current_required');
+    if (newPassword.length < 10) return t('account.errors.too_short');
+    if (!/[A-Z]/.test(newPassword)) return t('account.errors.no_uppercase');
+    if (!/[0-9]/.test(newPassword)) return t('account.errors.no_digit');
+    if (newPassword === currentPassword) return t('account.errors.same_as_current');
+    if (newPassword !== confirmPassword) return t('account.errors.mismatch');
     return null;
   };
 
@@ -54,7 +57,7 @@ export function Account() {
     setSubmitting(true);
     try {
       await changePassword({ current_password: currentPassword, new_password: newPassword });
-      setFormSuccess('Mot de passe mis a jour.');
+      setFormSuccess(t('account.password_updated'));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -63,34 +66,35 @@ export function Account() {
       const status = apiError.response?.status;
       const detail = apiError.response?.data?.detail;
       if (status === 400 && detail) setFormError(detail);
-      else if (status === 422) setFormError('Mot de passe trop faible.');
-      else setFormError('Impossible de modifier le mot de passe.');
+      else if (status === 422) setFormError(t('account.errors.weak'));
+      else setFormError(t('account.errors.unexpected'));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    void i18n.changeLanguage(e.target.value);
+  };
+
   return (
     <div className="max-w-3xl space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold text-white">Mon compte</h1>
-        <p className="text-sm text-slate-400">Profil utilisateur et gestion du mot de passe.</p>
+        <h1 className="text-2xl font-bold text-white">{t('account.title')}</h1>
+        <p className="text-sm text-slate-400">{t('account.subtitle')}</p>
       </header>
 
-      <section
-        aria-label="Profil"
-        className="bg-surface rounded-2xl border border-border p-6"
-      >
+      <section aria-label={t('account.profile')} className="bg-surface rounded-2xl border border-border p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/20">
             <UserIcon className="w-5 h-5 text-primary" />
           </div>
-          <h2 className="text-lg font-semibold text-white">Profil</h2>
+          <h2 className="text-lg font-semibold text-white">{t('account.profile')}</h2>
         </div>
 
         {loadingProfile && (
           <div className="flex items-center gap-2 text-slate-400 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" /> Chargement...
+            <Loader2 className="w-4 h-4 animate-spin" /> {t('account.loading_profile')}
           </div>
         )}
 
@@ -103,34 +107,60 @@ export function Account() {
         {profile && !loadError && (
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <div>
-              <dt className="text-slate-400">Email</dt>
+              <dt className="text-slate-400">{t('account.fields.email')}</dt>
               <dd className="text-white font-medium">{profile.email}</dd>
             </div>
             <div>
-              <dt className="text-slate-400">Nom complet</dt>
+              <dt className="text-slate-400">{t('account.fields.full_name')}</dt>
               <dd className="text-white font-medium">{profile.full_name}</dd>
             </div>
             <div>
-              <dt className="text-slate-400">Role</dt>
+              <dt className="text-slate-400">{t('account.fields.role')}</dt>
               <dd className="text-white font-medium capitalize">{profile.role}</dd>
             </div>
             <div>
-              <dt className="text-slate-400">Statut</dt>
-              <dd className="text-white font-medium">{profile.is_active ? 'Actif' : 'Inactif'}</dd>
+              <dt className="text-slate-400">{t('account.fields.status')}</dt>
+              <dd className="text-white font-medium">
+                {profile.is_active ? t('account.fields.active') : t('account.fields.inactive')}
+              </dd>
             </div>
           </dl>
         )}
       </section>
 
-      <section
-        aria-label="Changer le mot de passe"
-        className="bg-surface rounded-2xl border border-border p-6"
-      >
+      <section aria-label={t('account.language_section')} className="bg-surface rounded-2xl border border-border p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/20">
+            <Globe className="w-5 h-5 text-primary" />
+          </div>
+          <h2 className="text-lg font-semibold text-white">{t('account.language_section')}</h2>
+        </div>
+        <div className="space-y-2 max-w-sm">
+          <label htmlFor="language_select" className="block text-sm font-medium text-slate-300">
+            {t('common.language')}
+          </label>
+          <select
+            id="language_select"
+            value={i18n.resolvedLanguage ?? 'fr'}
+            onChange={handleLanguageChange}
+            className="w-full px-3 py-2.5 rounded-lg bg-background border border-border text-white focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {SUPPORTED_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.flag} {l.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">{t('account.language_hint')}</p>
+        </div>
+      </section>
+
+      <section aria-label={t('account.change_password')} className="bg-surface rounded-2xl border border-border p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/20">
             <KeyRound className="w-5 h-5 text-primary" />
           </div>
-          <h2 className="text-lg font-semibold text-white">Changer le mot de passe</h2>
+          <h2 className="text-lg font-semibold text-white">{t('account.change_password')}</h2>
         </div>
 
         <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4 max-w-md">
@@ -147,7 +177,7 @@ export function Account() {
 
           <div className="space-y-1">
             <label htmlFor="current_password" className="block text-sm font-medium text-slate-300">
-              Mot de passe actuel
+              {t('account.current_password_label')}
             </label>
             <input
               id="current_password"
@@ -162,7 +192,7 @@ export function Account() {
 
           <div className="space-y-1">
             <label htmlFor="new_password" className="block text-sm font-medium text-slate-300">
-              Nouveau mot de passe
+              {t('account.new_password_label')}
             </label>
             <input
               id="new_password"
@@ -173,12 +203,12 @@ export function Account() {
               onChange={(e) => setNewPassword(e.target.value)}
               className="w-full px-3 py-2.5 rounded-lg bg-background border border-border text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
             />
-            <p className="text-xs text-slate-500">10 caracteres minimum, dont au moins une majuscule et un chiffre.</p>
+            <p className="text-xs text-slate-500">{t('account.password_hint')}</p>
           </div>
 
           <div className="space-y-1">
             <label htmlFor="confirm_password" className="block text-sm font-medium text-slate-300">
-              Confirmer le nouveau mot de passe
+              {t('account.confirm_password_label')}
             </label>
             <input
               id="confirm_password"
@@ -199,10 +229,10 @@ export function Account() {
           >
             {submitting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Enregistrement...
+                <Loader2 className="w-4 h-4 animate-spin" /> {t('account.submitting')}
               </>
             ) : (
-              'Mettre a jour le mot de passe'
+              t('account.update_password')
             )}
           </button>
         </form>

@@ -15,12 +15,13 @@ export interface Battery {
   capacity_kwh: number;
   max_power_kw: number;
   protocol: BatteryProtocol;
-  soc_percent: number;
-  power_kw: number;
+  // Telemetry fields are null until the battery has at least one reading.
+  soc_percent: number | null;
+  power_kw: number | null;
   state: BatteryState;
-  temperature_c: number;
-  voltage_v?: number;
-  last_seen?: string;
+  temperature_c: number | null;
+  voltage_v?: number | null;
+  last_seen?: string | null;
   manufacturer?: string;
 }
 
@@ -33,6 +34,8 @@ export interface FleetMetrics {
   pnl_jour_eur?: number;
 }
 
+export type MGPZone = 'NORD' | 'CNOR' | 'CSUD' | 'SUD' | 'CALA' | 'SARD' | 'SICI' | 'PUN';
+
 export interface MGPPrice {
   hour: number;
   price_eur_mwh: number;
@@ -40,6 +43,13 @@ export interface MGPPrice {
 
 export interface MGPPricesResponse {
   prices: MGPPrice[];
+  zone?: MGPZone | string;
+  delivery_date?: string;
+}
+
+export interface MGPZoneInfo {
+  code: MGPZone;
+  label: string;
 }
 
 export type OptimizeScenario = 'autoconsommation' | 'arbitrage' | 'stochastique';

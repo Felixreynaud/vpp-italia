@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Activity, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { requestPasswordReset } from '../api/client';
 
 export function ForgotPassword() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
@@ -33,7 +35,7 @@ export function ForgotPassword() {
             <Activity className="w-7 h-7 text-primary" />
           </div>
           <h1 className="text-2xl font-bold text-white">VPP Italia</h1>
-          <p className="text-sm text-slate-400 mt-1">Reinitialisation du mot de passe</p>
+          <p className="text-sm text-slate-400 mt-1">{t('forgot_password.subtitle')}</p>
         </div>
 
         <div className="bg-surface rounded-2xl border border-border p-6">
@@ -42,24 +44,23 @@ export function ForgotPassword() {
               <div className="flex justify-center">
                 <CheckCircle2 className="w-10 h-10 text-success" />
               </div>
-              <h2 className="text-lg font-semibold text-white">Verifiez votre boite mail</h2>
+              <h2 className="text-lg font-semibold text-white">{t('forgot_password.success_title')}</h2>
               <p className="text-sm text-slate-400">
-                Si un compte est associe a <strong className="text-white">{email}</strong>, vous recevrez
-                un lien pour reinitialiser votre mot de passe d'ici quelques minutes.
+                {t('forgot_password.success_message', { email })}
               </p>
-              <p className="text-xs text-slate-500">Le lien expire dans 1 heure.</p>
+              <p className="text-xs text-slate-500">{t('forgot_password.expires_hint')}</p>
               <Link
                 to="/login"
                 className="inline-block text-sm text-primary hover:underline"
               >
-                Retour a la connexion
+                {t('forgot_password.back_to_login')}
               </Link>
             </div>
           ) : (
             <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
-              <h2 className="text-lg font-semibold text-white text-center">Mot de passe oublie</h2>
+              <h2 className="text-lg font-semibold text-white text-center">{t('forgot_password.title')}</h2>
               <p className="text-sm text-slate-400 text-center">
-                Entrez votre adresse email pour recevoir un lien de reinitialisation.
+                {t('forgot_password.instruction')}
               </p>
 
               {error && (
@@ -70,7 +71,7 @@ export function ForgotPassword() {
 
               <div className="space-y-1">
                 <label htmlFor="email" className="block text-sm font-medium text-slate-300">
-                  Email
+                  {t('forgot_password.email_label')}
                 </label>
                 <input
                   id="email"
@@ -80,7 +81,7 @@ export function ForgotPassword() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-lg bg-background border border-border text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-                  placeholder="vous@exemple.com"
+                  placeholder={t('forgot_password.email_placeholder')}
                 />
               </div>
 
@@ -91,15 +92,15 @@ export function ForgotPassword() {
                 aria-busy={submitting}
               >
                 {submitting ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Envoi...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {t('forgot_password.submitting')}</>
                 ) : (
-                  'Envoyer le lien'
+                  t('forgot_password.submit')
                 )}
               </button>
 
               <p className="text-center">
                 <Link to="/login" className="text-sm text-primary hover:underline">
-                  Retour a la connexion
+                  {t('forgot_password.back_to_login')}
                 </Link>
               </p>
             </form>

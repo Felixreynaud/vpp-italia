@@ -1,0 +1,107 @@
+{
+  "common": {
+    "loading": "Caricamento...",
+    "error": "Errore",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "delete": "Elimina",
+    "edit": "Modifica",
+    "back": "Indietro",
+    "refresh": "Aggiorna",
+    "language": "Lingua",
+    "minute_short": "min"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "optimize": "Ottimizzazione",
+    "batteries": "Attivazioni batterie",
+    "history": "Storico",
+    "admin_batteries": "Gestione batterie",
+    "portfolio": "Portfolio batterie",
+    "users": "Utenti",
+    "account": "Il mio account",
+    "logout": "Disconnetti"
+  },
+  "login": {
+    "title": "Accesso",
+    "subtitle": "Pannello Operatore",
+    "username_label": "Nome utente",
+    "username_placeholder": "operatore",
+    "password_label": "Password",
+    "password_placeholder": "********",
+    "submit": "Accedi",
+    "submitting": "Accesso in corso...",
+    "invalid_credentials": "Credenziali non valide. Riprova.",
+    "forgot_password": "Password dimenticata?",
+    "footer": "VPP Italia v0.1 — Ambiente sicuro"
+  },
+  "forgot_password": {
+    "title": "Password dimenticata",
+    "subtitle": "Reimpostazione della password",
+    "instruction": "Inserisci la tua email per ricevere un link di reimpostazione.",
+    "email_label": "Email",
+    "email_placeholder": "tu@esempio.com",
+    "submit": "Invia il link",
+    "submitting": "Invio in corso...",
+    "success_title": "Controlla la tua casella email",
+    "success_message": "Se un account e associato a {{email}}, riceverai un link per reimpostare la password entro pochi minuti.",
+    "expires_hint": "Il link scade dopo 1 ora.",
+    "back_to_login": "Torna all'accesso"
+  },
+  "reset_password": {
+    "title": "Nuova password",
+    "subtitle": "Imposta una nuova password",
+    "new_password_label": "Nuova password",
+    "confirm_label": "Conferma",
+    "submit": "Salva la password",
+    "submitting": "Salvataggio...",
+    "hint": "Almeno 10 caratteri, con almeno una maiuscola e un numero.",
+    "success_title": "Password salvata",
+    "success_message": "Stai per essere reindirizzato alla pagina di accesso...",
+    "errors": {
+      "token_missing": "Link non valido: token mancante.",
+      "too_short": "La password deve essere di almeno 10 caratteri.",
+      "no_uppercase": "La password deve contenere almeno una maiuscola.",
+      "no_digit": "La password deve contenere almeno un numero.",
+      "mismatch": "La conferma non corrisponde.",
+      "invalid_token": "Link non valido o scaduto. Richiedine uno nuovo.",
+      "weak": "Password troppo debole.",
+      "unexpected": "Errore imprevisto. Riprova piu tardi."
+    }
+  },
+  "account": {
+    "title": "Il mio account",
+    "subtitle": "Profilo utente e gestione della password.",
+    "profile": "Profilo",
+    "loading_profile": "Caricamento...",
+    "load_error": "Impossibile caricare il profilo.",
+    "fields": {
+      "email": "Email",
+      "full_name": "Nome completo",
+      "role": "Ruolo",
+      "status": "Stato",
+      "active": "Attivo",
+      "inactive": "Inattivo"
+    },
+    "change_password": "Cambia password",
+    "current_password_label": "Password attuale",
+    "new_password_label": "Nuova password",
+    "confirm_password_label": "Conferma la nuova password",
+    "password_hint": "Almeno 10 caratteri, con almeno una maiuscola e un numero.",
+    "update_password": "Aggiorna la password",
+    "submitting": "Salvataggio...",
+    "password_updated": "Password aggiornata.",
+    "errors": {
+      "current_required": "La password attuale e obbligatoria.",
+      "too_short": "La nuova password deve essere di almeno 10 caratteri.",
+      "no_uppercase": "La nuova password deve contenere almeno una maiuscola.",
+      "no_digit": "La nuova password deve contenere almeno un numero.",
+      "same_as_current": "La nuova password deve essere diversa da quella attuale.",
+      "mismatch": "La conferma non corrisponde.",
+      "weak": "Password troppo debole.",
+      "unexpected": "Impossibile modificare la password."
+    },
+    "language_section": "Lingua",
+    "language_hint": "Il cambiamento ha effetto immediato."
+  }
+}

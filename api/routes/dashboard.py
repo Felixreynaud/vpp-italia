@@ -106,52 +106,8 @@ async def fleet_metrics(db: DbSession, _user: CurrentUser) -> dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
-# /markets/mgp/prices — courbe MGP du jour (mock plausible en attendant GME)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/markets/mgp/prices")
-async def mgp_prices_today(_user: CurrentUser) -> dict[str, Any]:
-    """Courbe MGP horaire du jour — mock réaliste : creux nocturnes + pics 18-21h."""
-    # Base curve (€/MWh) typique italienne — creux à 3-5h, pic à 18-20h
-    base_curve = [
-        45,
-        42,
-        40,
-        38,
-        37,
-        38,
-        50,
-        75,
-        90,
-        85,
-        78,
-        72,
-        68,
-        65,
-        70,
-        80,
-        95,
-        110,
-        105,
-        92,
-        78,
-        65,
-        55,
-        48,
-    ]
-    prices = [
-        {"hour": h, "price_eur_mwh": round(p + random.gauss(0, 3), 2)}
-        for h, p in enumerate(base_curve)
-    ]
-    return {
-        "data": {"prices": prices},
-        "meta": {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "source": "mock-pending-gme-integration",
-        },
-    }
+# Note: /markets/mgp/prices is now served by api/routes/markets.py (reads from
+# the mgp_prices table, with a per-zone fallback to a mock curve when DB empty).
 
 
 # ---------------------------------------------------------------------------

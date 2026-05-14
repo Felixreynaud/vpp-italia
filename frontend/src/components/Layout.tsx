@@ -14,28 +14,30 @@ import {
   UserCircle,
   Users,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useCETClock } from '../hooks/useCETClock';
 import { useAuth } from '../hooks/useAuth';
 import { logout } from '../api/client';
 
 interface NavItem {
   to: string;
-  label: string;
+  labelKey: string;
   icon: typeof LayoutDashboard;
   adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/optimize', label: 'Optimisation', icon: Zap },
-  { to: '/batteries', label: 'Activations batteries', icon: Battery },
-  { to: '/history', label: 'Historique', icon: BarChart2 },
-  { to: '/admin/batteries', label: 'Management batterie', icon: Settings },
-  { to: '/portfolio', label: 'Portefeuille batteries', icon: FolderOpen },
-  { to: '/admin/users', label: 'Utilisateurs', icon: Users, adminOnly: true },
+  { to: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { to: '/optimize', labelKey: 'nav.optimize', icon: Zap },
+  { to: '/batteries', labelKey: 'nav.batteries', icon: Battery },
+  { to: '/history', labelKey: 'nav.history', icon: BarChart2 },
+  { to: '/admin/batteries', labelKey: 'nav.admin_batteries', icon: Settings },
+  { to: '/portfolio', labelKey: 'nav.portfolio', icon: FolderOpen },
+  { to: '/admin/users', labelKey: 'nav.users', icon: Users, adminOnly: true },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const cetTime = useCETClock();
@@ -86,7 +88,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1" aria-label="Pages">
-          {visibleNavItems.map(({ to, label, icon: Icon }) => (
+          {visibleNavItems.map(({ to, labelKey, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -100,7 +102,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               }
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
+              {t(labelKey)}
             </NavLink>
           ))}
         </nav>
@@ -116,15 +118,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             }
           >
             <UserCircle className="w-4 h-4 flex-shrink-0" />
-            Mon compte
+            {t('nav.account')}
           </NavLink>
           <button
             onClick={() => { void handleLogout(); }}
             className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-700/50 hover:text-white transition-colors"
-            aria-label="Se deconnecter"
+            aria-label={t('nav.logout')}
           >
             <LogOut className="w-4 h-4 flex-shrink-0" />
-            Deconnexion
+            {t('nav.logout')}
           </button>
         </div>
       </aside>

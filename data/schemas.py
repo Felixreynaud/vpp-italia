@@ -8,10 +8,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from data.models import (
+    AggregateStrategy,
     BatteryProtocol,
     BatteryState,
     DispatchSource,
     MarketName,
+    MGPZone,
     OfferStatus,
     UserRole,
 )
@@ -349,3 +351,93 @@ class PasswordChangeRequest(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError("password must contain at least one digit")
         return v
+
+
+# ---------------------------------------------------------------------------
+# MGP Day-Ahead price schemas
+# ---------------------------------------------------------------------------
+
+
+class MGPPriceItem(BaseModel):
+    """A single MGP price slot."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    delivery_date: str
+    hour: int = Field(..., ge=0, le=23)
+    zone: MGPZone
+    price_eur_mwh: Decimal
+
+
+class MGPPriceResponse(BaseModel):
+    """Response for GET /api/v1/markets/mgp/prices.
+
+    `prices` is the 24-hour curve for the requested (zone, date), in
+    chronological order. `meta` carries the count and possibly metadata
+    about the source (fetched_at).
+    """
+
+    data: list[MGPPriceItem]
+    meta: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Aggregate schemas
+# ---------------------------------------------------------------------------
+
+
+class AggregateBase(BaseModel):
+    name: str = Field(..., max_length=128)
+    description: str | None = Field(default=None, max_length=512)
+    strategy_type: AggregateStrategy = AggregateStrategy.ARBITRAGE_MGP
+    target_market: MarketName | None = None
+    target_zone: MGPZone | None = None
+    is_active: bool = True
+
+
+class AggregateCreate(AggregateBase):
+    pass
+
+
+class AggregateUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=128)
+    description: str | None = Field(default=None, max_length=512)
+    strategy_type: AggregateStrategy | None = None
+    target_market: MarketName | None = None
+    target_zone: MGPZone | None = None
+    is_active: bool | None = None
+
+
+class AggregateBatteryRef(BaseModel):
+    """Lightweight battery view inlined inside aggregate responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    battery_id: UUID
+    asset_id: str
+    name: str
+    capacity_kwh: Decimal
+    max_power_kw: Decimal
+
+
+class AggregateResponse(AggregateBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    aggregate_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    batteries: list[AggregateBatteryRef] = Field(default_factory=list)
+
+
+class AggregateListResponse(BaseModel):
+    data: list[AggregateResponse]
+    meta: dict[str, Any]
+
+
+class BatteryAggregateAssignment(BaseModel):
+    """Body for PATCH /admin/batteries/{id}/aggregate."""
+
+    aggregate_id: UUID | None = Field(
+        default=None,
+        description="Set null to unassign the battery from any aggregate.",
+    )

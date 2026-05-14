@@ -5,8 +5,20 @@ import { EnergyFlow } from '../components/EnergyFlow';
 import { PriceChart } from '../components/PriceChart';
 import { useFleet } from '../hooks/useFleet';
 
+const MGP_ZONES: { code: string; label: string }[] = [
+  { code: 'NORD', label: 'Nord' },
+  { code: 'CNOR', label: 'Centre-Nord' },
+  { code: 'CSUD', label: 'Centre-Sud' },
+  { code: 'SUD', label: 'Sud' },
+  { code: 'CALA', label: 'Calabre' },
+  { code: 'SARD', label: 'Sardaigne' },
+  { code: 'SICI', label: 'Sicile' },
+  { code: 'PUN', label: 'PUN (national)' },
+];
+
 export function Dashboard() {
-  const { metrics, mgpPrices, loading, error, refresh } = useFleet(10000);
+  const [zone, setZone] = useState<string>('NORD');
+  const { metrics, mgpPrices, loading, error, refresh } = useFleet(10000, zone);
   const [autoMode, setAutoMode] = useState(true);
 
   return (
@@ -53,7 +65,21 @@ export function Dashboard() {
         <div className="bg-surface rounded-xl border border-border p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-slate-300">Prix MGP — 24h</h2>
-            <span className="text-xs text-slate-500">€/MWh</span>
+            <div className="flex items-center gap-3">
+              <select
+                value={zone}
+                onChange={(e) => setZone(e.target.value)}
+                aria-label="Zone MGP"
+                className="bg-background border border-border rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {MGP_ZONES.map((z) => (
+                  <option key={z.code} value={z.code}>
+                    {z.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-500">€/MWh</span>
+            </div>
           </div>
           {loading ? <div className="skeleton h-40 w-full rounded-xl" /> : <PriceChart prices={mgpPrices} />}
           {mgpPrices.length > 0 && (
