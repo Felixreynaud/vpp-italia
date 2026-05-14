@@ -1,13 +1,15 @@
 """SQLAlchemy ORM models — TimescaleDB compatible."""
 
 import uuid
+from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
-    Column,
     DateTime,
     Enum,
     ForeignKey,
@@ -76,26 +78,26 @@ class PasswordResetPurpose(StrEnum):
 class Battery(Base):
     __tablename__ = "batteries"
 
-    battery_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    asset_id = Column(String(64), unique=True, nullable=False, comment="Terna UPCA asset code")
-    site_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    name = Column(String(128), nullable=False)
-    protocol: Mapped[BatteryProtocol] = mapped_column(Enum(BatteryProtocol), nullable=False)
-    host = Column(String(255), nullable=False, comment="IP or hostname for protocol connection")
-    port = Column(Integer, nullable=False)
-    capacity_kwh = Column(Numeric(10, 2), nullable=False)
-    max_power_kw = Column(Numeric(10, 2), nullable=False)
-    min_soc_percent = Column(Numeric(5, 2), nullable=False, default=10.0)
-    max_soc_percent = Column(Numeric(5, 2), nullable=False, default=90.0)
-    ramp_rate_kw_per_min = Column(Numeric(8, 2), nullable=True)
-    state: Mapped[BatteryState] = mapped_column(
-        Enum(BatteryState), nullable=False, default=BatteryState.OFFLINE
+    battery_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    is_active = Column(Boolean, nullable=False, default=True)
-    metadata_ = Column("metadata", JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    asset_id: Mapped[str] = mapped_column(String(64), unique=True, comment="Terna UPCA asset code")
+    site_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    protocol: Mapped[BatteryProtocol] = mapped_column(Enum(BatteryProtocol))
+    host: Mapped[str] = mapped_column(String(255), comment="IP or hostname for protocol connection")
+    port: Mapped[int] = mapped_column(Integer)
+    capacity_kwh: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    max_power_kw: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    min_soc_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("10.0"))
+    max_soc_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("90.0"))
+    ramp_rate_kw_per_min: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    state: Mapped[BatteryState] = mapped_column(Enum(BatteryState), default=BatteryState.OFFLINE)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     readings = relationship("BatteryReading", back_populates="battery", lazy="dynamic")
@@ -107,20 +109,22 @@ class BatteryReading(Base):
 
     __tablename__ = "battery_readings"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    time = Column(DateTime(timezone=True), nullable=False, index=True)
-    battery_id = Column(
-        UUID(as_uuid=True), ForeignKey("batteries.battery_id"), nullable=False, index=True
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    battery_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("batteries.battery_id"), index=True
     )
-    soc_percent = Column(Numeric(5, 2), nullable=True)
-    power_kw = Column(
-        Numeric(10, 2), nullable=True, comment="Positive = discharge, negative = charge"
+    soc_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    power_kw: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), comment="Positive = discharge, negative = charge"
     )
-    voltage_v = Column(Numeric(8, 2), nullable=True)
-    current_a = Column(Numeric(8, 2), nullable=True)
-    temperature_c = Column(Numeric(6, 2), nullable=True)
-    state: Mapped[BatteryState | None] = mapped_column(Enum(BatteryState), nullable=True)
-    raw = Column(JSON, nullable=True, comment="Full raw payload from connector")
+    voltage_v: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    current_a: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    temperature_c: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    state: Mapped[BatteryState | None] = mapped_column(Enum(BatteryState))
+    raw: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, comment="Full raw payload from connector"
+    )
 
     battery = relationship("Battery", back_populates="readings")
 
@@ -135,20 +139,22 @@ class DispatchPlan(Base):
         ),
     )
 
-    plan_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    battery_id = Column(
-        UUID(as_uuid=True), ForeignKey("batteries.battery_id"), nullable=False, index=True
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    delivery_date = Column(String(10), nullable=False, comment="YYYY-MM-DD in Europe/Rome")
-    quarter_hour = Column(Integer, nullable=False, comment="0-95, representing QH of the day")
-    power_kw = Column(
-        Numeric(10, 2), nullable=False, comment="Target power setpoint (+ discharge, - charge)"
+    battery_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("batteries.battery_id"), index=True
+    )
+    delivery_date: Mapped[str] = mapped_column(String(10), comment="YYYY-MM-DD in Europe/Rome")
+    quarter_hour: Mapped[int] = mapped_column(Integer, comment="0-95, representing QH of the day")
+    power_kw: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), comment="Target power setpoint (+ discharge, - charge)"
     )
     source: Mapped[DispatchSource] = mapped_column(
-        Enum(DispatchSource), nullable=False, default=DispatchSource.OPTIMIZER
+        Enum(DispatchSource), default=DispatchSource.OPTIMIZER
     )
-    optimization_run_id = Column(UUID(as_uuid=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    optimization_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     battery = relationship("Battery", back_populates="dispatch_plans")
 
@@ -158,26 +164,26 @@ class MarketOffer(Base):
 
     __tablename__ = "market_offers"
 
-    offer_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    market: Mapped[MarketName] = mapped_column(Enum(MarketName), nullable=False, index=True)
-    delivery_date = Column(String(10), nullable=False, comment="YYYY-MM-DD in Europe/Rome")
-    quarter_hour_start = Column(Integer, nullable=False, comment="First QH covered (0-95)")
-    quarter_hour_end = Column(Integer, nullable=False, comment="Last QH covered (inclusive)")
-    energy_mwh = Column(Numeric(10, 3), nullable=True)
-    capacity_mw = Column(Numeric(10, 3), nullable=True)
-    price_eur_mwh = Column(Numeric(10, 2), nullable=False)
-    direction = Column(String(10), nullable=False, comment="UP | DOWN | BOTH")
-    external_id = Column(
-        String(128), nullable=True, comment="ID returned by GME/Terna after submission"
+    offer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    status: Mapped[OfferStatus] = mapped_column(
-        Enum(OfferStatus), nullable=False, default=OfferStatus.DRAFT
+    market: Mapped[MarketName] = mapped_column(Enum(MarketName), index=True)
+    delivery_date: Mapped[str] = mapped_column(String(10), comment="YYYY-MM-DD in Europe/Rome")
+    quarter_hour_start: Mapped[int] = mapped_column(Integer, comment="First QH covered (0-95)")
+    quarter_hour_end: Mapped[int] = mapped_column(Integer, comment="Last QH covered (inclusive)")
+    energy_mwh: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    capacity_mw: Mapped[Decimal | None] = mapped_column(Numeric(10, 3))
+    price_eur_mwh: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    direction: Mapped[str] = mapped_column(String(10), comment="UP | DOWN | BOTH")
+    external_id: Mapped[str | None] = mapped_column(
+        String(128), comment="ID returned by GME/Terna after submission"
     )
-    response_payload = Column(JSON, nullable=True)
-    submitted_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    status: Mapped[OfferStatus] = mapped_column(Enum(OfferStatus), default=OfferStatus.DRAFT)
+    response_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 
@@ -186,22 +192,22 @@ class User(Base):
 
     __tablename__ = "users"
 
-    user_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    # NULL until the user accepts the invitation and sets their password
-    password_hash = Column(String(255), nullable=True)
-    full_name = Column(String(128), nullable=False)
-    role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole), nullable=False, default=UserRole.OPERATOR
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    is_active = Column(Boolean, nullable=False, default=False)
-    email_verified_at = Column(DateTime(timezone=True), nullable=True)
-    last_login_at = Column(DateTime(timezone=True), nullable=True)
-    failed_login_attempts = Column(Integer, nullable=False, default=0)
-    locked_until = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # NULL until the user accepts the invitation and sets their password
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(128))
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.OPERATOR)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     reset_tokens = relationship(
@@ -222,16 +228,18 @@ class RefreshToken(Base):
 
     __tablename__ = "refresh_tokens"
 
-    token_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    token_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    token_hash = Column(String(128), unique=True, nullable=False, index=True)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
-    user_agent = Column(String(255), nullable=True)
-    ip_address = Column(String(45), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE")
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    user_agent: Mapped[str | None] = mapped_column(String(255))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="refresh_tokens")
 
@@ -244,16 +252,18 @@ class PasswordResetToken(Base):
 
     __tablename__ = "password_reset_tokens"
 
-    token_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    token_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    token_hash = Column(String(128), unique=True, nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE")
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     purpose: Mapped[PasswordResetPurpose] = mapped_column(
-        Enum(PasswordResetPurpose), nullable=False, default=PasswordResetPurpose.RESET
+        Enum(PasswordResetPurpose), default=PasswordResetPurpose.RESET
     )
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    used_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="reset_tokens")

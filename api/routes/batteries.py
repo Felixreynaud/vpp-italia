@@ -159,7 +159,8 @@ async def _push_to_simulator(
                 json={"plant_code": plant_code, "plant_name": plant_name, "model": model},
             )
             if resp.status_code in (200, 201):
-                return resp.json()
+                data: dict[str, Any] = resp.json()
+                return data
             logger.warning(
                 "simulator.push_failed",
                 status=resp.status_code,

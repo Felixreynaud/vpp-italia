@@ -348,9 +348,10 @@ async def get_dev_real_kpi(
     # Build KPI response — mirror real Huawei response shape
     out: list[dict[str, Any]] = []
     for dev_id in device_ids:
-        bat = simulator._batteries.get(dev_id)
-        if bat is None:
+        bat_opt = simulator._batteries.get(dev_id)
+        if bat_opt is None:
             continue
+        bat = bat_opt
         status = bat.to_status()
         out.append(
             {
